@@ -35,3 +35,9 @@ pass numbers to their neighbours. It's a well-published, proven approach
 (Kung & Leiserson 1978; Google's TPU papers), uses little power because data
 is reused instead of fetched repeatedly from memory, and scales by making the
 grid larger. First version: 4x4, INT8 inputs, INT32 results.
+
+### D-007 - Sole focus on the data-centre chip (Stage 4)
+Founder's decision. Stages 1-3 (edge chips, inference cards, model-support
+products) are removed from the plan. All work goes to the data-centre AI
+accelerator and its simulation-based pitch package. Replaces the "ladder"
+in earlier versions of VISION.md.

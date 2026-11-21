@@ -5,7 +5,7 @@
 Become Africa's leading AI-chip designer and the go-to partner for every
 African company, lab and government with AI ambitions.
 
-## The primary goal: Stage 4
+## The goal
 
 An AI accelerator architecture for **African data centres**, able to train and
 run large AI models, including models built for African languages and data.
@@ -33,24 +33,21 @@ engineers and funding.
   controlled elsewhere. Supply can be restricted for political reasons.
   A continent that wants its own AI models and data centres needs some
   control over the hardware underneath them.
-- **Different conditions.** Unreliable power and load-shedding, expensive
-  bandwidth, cost sensitivity, and local needs (African-language AI,
-  agriculture, mining, utilities) that global chip companies don't design for.
+- **African AI models.** South Africa and the continent plan to build their
+  own AI models, including models for African languages. Those need data
+  centres, and data centres need AI chips.
+- **African data-centre conditions.** Expensive and unreliable electricity
+  and cooling, and tight budgets. A chip designed for these conditions is a
+  different chip from one designed for American hyperscalers.
 - **Energy efficiency as a design principle.** Every Imbewu design is judged
-  on performance per watt, not only raw performance.
+  on performance per watt and per rand, not only raw performance.
 
-## The ladder
+## Focus
 
-The data-centre chip is the destination. These stages are how a company
-realistically gets there; each is a business in its own right and can be
-pursued in parallel once the team grows.
-
-| Stage | What | Role |
-|-------|------|------|
-| 1 | Edge AI chips (meters, farms, mines, phones) | Cheapest to build, fastest to sell |
-| 2 | Inference accelerator cards for local servers | First data-centre product |
-| 3 | Hardware/software tuned for African AI models | Partner of choice for African AI labs |
-| **4** | **Data-centre AI chips (training and inference)** | **Primary goal and focus of design work** |
+Imbewu has one focus: the data-centre AI accelerator. We are not building
+edge chips, plug-in inference cards or other side products along the way.
+Every design, test and document in this repository serves the data-centre
+chip and its pitch package (D-007).
 
 ## Roles
 

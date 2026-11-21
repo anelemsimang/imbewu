@@ -34,8 +34,8 @@ accelerator (see VISION.md).
 - [ ] Honest comparison with existing chips, per watt and per rand
 - [ ] Architecture document for engineers and reviewers
 - [ ] Pitch deck, cost-to-silicon plan, team plan
-- [ ] Optional: a small piece on real silicon via Tiny Tapeout or wafer.space,
-      as proof we can deliver
+- [ ] Optional, founder to decide: a small piece of the Imbewu tile on real silicon
+      (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
 Phase 1. Next step: parameterised grid sizes (8x8, 16x16).
