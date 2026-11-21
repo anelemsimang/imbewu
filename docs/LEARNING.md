@@ -54,7 +54,7 @@ inside an AI model (including large language models) is this operation,
 repeated billions of times.
 
 ## Systolic array
-Our matrix engine (`rtl/matmul4.v`). A grid of small MAC cells. Numbers from
+Our matrix engine (`rtl/systolic_array.v`). A grid of small MAC cells. Numbers from
 the first matrix flow in from the left, numbers from the second flow in from
 the top, and each cell multiplies whatever meets it, adds it to its own total,
 and passes the numbers on to its neighbours. The rows and columns enter
@@ -65,5 +65,18 @@ rhythm. The advantage is that each number is fetched from memory once and then
 reused by every cell it passes, and fetching from memory is what costs the
 most energy in a chip. Google's TPU uses this idea at 128x128 and larger.
 
-Our 4x4 version finishes a full 4x4 multiplication (64 multiplications) in
+The grid size is a setting (N), so one design builds any size. Our 4x4 version finishes a full 4x4 multiplication (64 multiplications) in
 12 clock ticks, with 16 cells working at the same time.
+
+## Parameters
+A setting in a chip design that changes its size or behaviour without
+rewriting it. Our systolic engine has one, N, the grid size. Real chips use
+the same trick: one well-tested design, built at whatever size the product needs.
+
+## Utilisation
+The share of time the chip's calculating cells are actually calculating. Our
+engine currently sits at about 33%: for each job, the grid has to fill with
+data and then empty out, and cells at the edges wait during that time. Idle
+cells still use power and still cost silicon, so raising utilisation is one
+of the most important things in AI-chip design. Nvidia and Google put huge
+effort into keeping their cores busy.

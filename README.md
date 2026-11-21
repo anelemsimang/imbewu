@@ -12,6 +12,7 @@ Start here:
 | [VISION.md](VISION.md) | What we're building and why |
 | [ROADMAP.md](ROADMAP.md) | The phases and where we are now |
 | [DECISIONS.md](DECISIONS.md) | Every major decision and the reason for it |
+| [docs/RESULTS.md](docs/RESULTS.md) | Measured test and size results |
 | [docs/LEARNING.md](docs/LEARNING.md) | Plain-language explanations of the chip concepts used here |
 
 ## Layout

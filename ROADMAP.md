@@ -9,9 +9,12 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
 - [x] First building block: multiply-accumulate (MAC) unit, 1,000 tests passing
 
 ## Phase 1 - Compute core 🔨 in progress  (G1, G5)
-- [x] 4x4 systolic matrix-multiply engine (`rtl/matmul4.v`),
+- [x] 4x4 systolic matrix-multiply engine (`rtl/systolic_array.v`),
       1,003 matrix multiplications / 16,048 results checked, 0 errors
-- [ ] Make the grid size a parameter and verify 8x8 and 16x16
+- [x] Grid size is a parameter (`rtl/systolic_array.v`); 4x4, 8x8 and 16x16
+      verified, 0 errors in 337,008 checked results (see docs/RESULTS.md)
+- [ ] Streaming: feed the next job in while the current one drains, raising
+      utilisation from ~33% towards 100%
 - [ ] Larger matrices: break big matrices into blocks the grid can handle ("tiling")
 - [ ] Precision flexibility: FP8 and FP4 using the open OCP Microscaling (MX)
       formats, plus BF16 for training; one engine that switches between them
@@ -49,4 +52,4 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Next step: parameterised grid sizes (8x8, 16x16).
+Phase 1. Next step: streaming to raise utilisation from ~33% towards 100%.

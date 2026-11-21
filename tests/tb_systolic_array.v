@@ -1,10 +1,18 @@
-// tb_matmul4.v - tests the 4x4 systolic engine against a reference model
+// tb_systolic_array.v - tests the NxN systolic engine against a reference model
 //
-// Runs hand-picked cases (identity, all-max, all-min) plus 1,000 random
-// matrix pairs, and records a waveform of the first run to build/matmul4.vcd.
+// Runs hand-picked cases (identity, all-max, all-min) plus random matrix
+// pairs, and records a waveform of the first run to build/systolic_N<N>.vcd.
+// Grid size and trial count are set from the command line:
+//   iverilog -DGRID_N=8 -DTRIALS=1000 ...
 `timescale 1ns/1ps
-module tb_matmul4;
-    localparam N = 4, TRIALS = 1000;
+`ifndef GRID_N
+`define GRID_N 4
+`endif
+`ifndef TRIALS
+`define TRIALS 1000
+`endif
+module tb_systolic_array;
+    localparam N = `GRID_N, TRIALS = `TRIALS;
     reg clk = 0, rst = 1, start = 0;
     reg  [N*N*8-1:0]  a_flat, b_flat;
     wire [N*N*32-1:0] c_flat;
@@ -12,7 +20,7 @@ module tb_matmul4;
     integer r, c, k, trial, errors = 0, cycles;
     reg signed [31:0] ref_c, got;
 
-    matmul4 #(.N(N)) dut (.clk(clk), .rst(rst), .start(start),
+    systolic_array #(.N(N)) dut (.clk(clk), .rst(rst), .start(start),
         .a_flat(a_flat), .b_flat(b_flat), .c_flat(c_flat), .busy(busy), .done(done));
     always #5 clk = ~clk;
 
@@ -41,12 +49,12 @@ module tb_matmul4;
     endtask
 
     initial begin
-        $dumpfile("build/matmul4.vcd");
-        $dumpvars(0, tb_matmul4);
+        $dumpfile($sformatf("build/systolic_N%0d.vcd", N));
+        $dumpvars(0, tb_systolic_array);
         a_flat = 0; b_flat = 0;
         repeat (2) @(posedge clk); #1 rst = 0;
 
-        // Case 1: A = identity, B = 1..16  ->  C must equal B
+        // Case 1: A = identity, B = 1, 2, 3, ...  ->  C must equal B
         trial = -3;
         for (r = 0; r < N; r = r + 1) for (c = 0; c < N; c = c + 1) begin
             a_flat[(r*N+c)*8 +: 8] = (r == c) ? 8'd1 : 8'd0;
@@ -54,7 +62,8 @@ module tb_matmul4;
         end
         run_and_check;
         $dumpoff;
-        $display("Latency: %0d cycles from start to done", cycles);
+        $display("SYSTOLIC %0dx%0d latency: %0d cycles for %0d multiply-adds on %0d cells",
+                 N, N, cycles, N*N*N, N*N);
 
         // Case 2: all +127 (largest INT8)
         trial = -2; a_flat = {N*N{8'sd127}}; b_flat = {N*N{8'sd127}}; run_and_check;
@@ -70,8 +79,8 @@ module tb_matmul4;
             run_and_check;
         end
 
-        $display("MATMUL4: %0d matrix multiplications (%0d results checked), %0d errors",
-                 TRIALS + 3, (TRIALS + 3) * N * N, errors);
+        $display("SYSTOLIC %0dx%0d: %0d matrix multiplications (%0d results checked), %0d errors",
+                 N, N, TRIALS + 3, (TRIALS + 3) * N * N, errors);
         if (errors == 0) $display("PASS"); else $display("FAIL");
         $finish;
     end
