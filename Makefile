@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic synth clean
+.PHONY: test test-mac test-systolic test-stream synth clean
 
-test: test-mac test-systolic
+test: test-mac test-systolic test-stream
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -22,6 +22,15 @@ test-systolic:
 	  vvp -n $(BUILD)/tb_systolic_$$n || exit 1; \
 	done
 
+# Version 2: the streaming engine, at every grid size in SIZES
+test-stream:
+	@mkdir -p $(BUILD)
+	@for n in $(SIZES); do \
+	  iverilog -g2012 -DGRID_N=$$n -DJOBS=300 -o $(BUILD)/tb_stream_$$n \
+	    rtl/pe_stream.v rtl/systolic_stream.v tests/tb_systolic_stream.v || exit 1; \
+	  vvp -n $(BUILD)/tb_stream_$$n || exit 1; \
+	done
+
 synth:
 	@mkdir -p $(BUILD)
 	@yosys -q -p "read_verilog rtl/mac.v; synth -top mac; tee -q -o $(BUILD)/mac_stat.txt stat"
@@ -29,6 +38,8 @@ synth:
 	@for n in $(SIZES); do \
 	  yosys -q -p "read_verilog rtl/pe.v rtl/systolic_array.v; chparam -set N $$n systolic_array; synth -top systolic_array; tee -q -o $(BUILD)/systolic_$${n}_stat.txt stat"; \
 	  grep -E "Number of cells" $(BUILD)/systolic_$${n}_stat.txt | tail -1 | sed "s/^/systolic $${n}x$${n}: /"; \
+	  yosys -q -p "read_verilog rtl/pe_stream.v rtl/systolic_stream.v; chparam -set N $$n systolic_stream; synth -top systolic_stream; tee -q -o $(BUILD)/stream_$${n}_stat.txt stat"; \
+	  grep -E "Number of cells" $(BUILD)/stream_$${n}_stat.txt | tail -1 | sed "s/^/stream $${n}x$${n}: /"; \
 	done
 
 clean:

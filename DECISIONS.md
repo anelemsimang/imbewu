@@ -55,3 +55,10 @@ Low-precision formats follow the open OCP Microscaling (MX) specification
 build on open industry standards (UALink, Ultra Ethernet) rather than
 copying NVLink. Both keep the design clean (D-003) and compatible with
 the wider industry.
+
+### D-010 - Streaming engine with tagged data
+Version 2 of the matrix engine tags each number with "valid" and "last"
+instead of using a central controller to start and stop jobs. Jobs run back
+to back, utilisation rises from ~33% to 99.5%, and the shared dimension K
+can vary per job. Cost: ~7% more logic. Version 1 (`rtl/systolic_array.v`)
+stays in the repository as the simple reference design.

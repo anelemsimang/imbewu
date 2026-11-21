@@ -33,3 +33,38 @@ The tests catch real bugs.
    (4,096 multiply-adds / (256 cells x 48 cycles) = 33%). Fix: stream the next
    job in while the current one drains, which should approach 100%. This is
    the next roadmap item. It matters for G1 (speed) and G5 (wasted power).
+
+## 2026-11-21 - Streaming engine (version 2): utilisation 33% -> 99.5% (G1, G5)
+
+Design: `rtl/systolic_stream.v` + `rtl/pe_stream.v`. Jobs flow through back
+to back. Each number carries a "valid" and a "last" tag, so a cell knows when
+a job ends and starts the next one on the very next tick. Finished answers
+leave one row per tick while new work is still flowing in. As a bonus, the
+shared matrix dimension K can be any length of at least N, so long matrix
+products need no extra hardware.
+
+Each size ran 300 back-to-back jobs (K varying from N to 3N, including the
+identity, all +127 and all -128 cases), first with no gaps and then with
+random gaps (30% of ticks idle).
+
+| Grid | Results checked (both runs) | Errors | Utilisation, no gaps | Logic cells (Yosys generic) | Size vs v1 |
+|------|-----------------------------|--------|----------------------|-----------------------------|------------|
+| 4x4   | 9,600   | 0 | 99.5% | 20,346  | +6.2% |
+| 8x8   | 38,400  | 0 | 99.5% | 80,872  | +8.3% |
+| 16x16 | 153,600 | 0 | 99.5% | 322,493 | +7.4% |
+
+Utilisation counts every tick from the first input to the last output,
+including filling and emptying the grid at the very start and end.
+
+**Test strength check:** a deliberately broken version (results read out one
+tick too early) failed 400 of 3,200 checks in each run at 8x8. The tests
+catch real bugs.
+
+**What it means:** at 16x16, version 1 completed about 85 multiply-adds per
+tick; version 2 completes about 255, **3x the work from a circuit only 7%
+larger**. More work from the same silicon and the same idle power is
+exactly what G1 and G5 ask for.
+
+**Process note:** the first run of the new test reported thousands of errors.
+The cause was in the test itself (the checker and the data generator shared
+loop counters), not in the chip design. Fixed before any result was recorded.

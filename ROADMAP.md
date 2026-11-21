@@ -13,9 +13,11 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
       1,003 matrix multiplications / 16,048 results checked, 0 errors
 - [x] Grid size is a parameter (`rtl/systolic_array.v`); 4x4, 8x8 and 16x16
       verified, 0 errors in 337,008 checked results (see docs/RESULTS.md)
-- [ ] Streaming: feed the next job in while the current one drains, raising
-      utilisation from ~33% towards 100%
-- [ ] Larger matrices: break big matrices into blocks the grid can handle ("tiling")
+- [x] Streaming engine (`rtl/systolic_stream.v`): jobs back to back, utilisation
+      33% -> 99.5% at 4x4, 8x8 and 16x16, 0 errors (see docs/RESULTS.md)
+- [x] Long products: the shared dimension K can be any length >= N
+- [ ] Larger matrices: a controller that breaks big matrices into blocks the
+      grid can handle ("tiling") and schedules them
 - [ ] Precision flexibility: FP8 and FP4 using the open OCP Microscaling (MX)
       formats, plus BF16 for training; one engine that switches between them
 - [ ] Accuracy check: run each format on real AI model data and measure the loss
@@ -52,4 +54,4 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Next step: streaming to raise utilisation from ~33% towards 100%.
+Phase 1. Next step: precision flexibility (FP8 / FP4 using the OCP MX formats).

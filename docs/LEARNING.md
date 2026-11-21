@@ -80,3 +80,19 @@ data and then empty out, and cells at the edges wait during that time. Idle
 cells still use power and still cost silicon, so raising utilisation is one
 of the most important things in AI-chip design. Nvidia and Google put huge
 effort into keeping their cores busy.
+
+## Streaming (pipelining)
+Our version-2 engine works like a factory line. Instead of waiting for one job
+to leave the grid before starting the next, the next job enters right behind
+it. Each number carries two small tags: "valid" (this is real data) and "last"
+(this is the final number of the job). When a cell sees "last", it parks its
+finished answer and starts the next job's total from zero on the very next
+tick. Result: cells are busy 99.5% of the time instead of 33%, three times the
+work from almost the same circuit. Every serious AI chip relies on this idea.
+
+## Throughput vs latency
+**Latency** is how long one job takes from start to finish. **Throughput** is
+how many jobs finish per second. Streaming barely changes latency but triples
+throughput. For a data centre serving millions of users, throughput is usually
+what pays the bills; for one person chatting, latency is what they feel.
+Goal G4 is about balancing both.
