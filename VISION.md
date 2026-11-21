@@ -27,6 +27,35 @@ With that, plus a cost and team plan for reaching silicon, we approach
 government (DSI, DTIC, IDC and similar), research partners and investors for
 engineers and funding.
 
+## The five design goals
+
+Set by the founder. Every part of the architecture must serve at least one.
+
+| # | Goal | What it means for the chip | How we prove it before silicon |
+|---|------|---------------------------|--------------------------------|
+| G1 | **Massive parallel computation** | Thousands of matrix engines working at once; flexible precision (FP8, FP4 and others) to multiply speed without losing accuracy | Verified engines and tiles in simulation; accuracy tests of each number format on real model data |
+| G2 | **High-speed chip-to-chip communication** | Many chips act as one machine, with no chip waiting on its neighbours | Simulated on-chip network and chip-to-chip links; a model of thousands of chips training together |
+| G3 | **Ultra-fast memory bandwidth** | Data reaches the engines continuously, with no "memory wall"; designed for stacked HBM | Memory-controller design plus a bandwidth model fed by real AI workloads |
+| G4 | **Low-latency, high-throughput inference** | Fast answers for each user and many users at once, including reasoning models that "think" longer | Performance model of tokens per second, response time and users served |
+| G5 | **Performance per watt** | The most AI output per megawatt, suited to costly, unreliable African power | Power estimates from the design tools, energy per operation, performance per watt and per rand |
+
+### What a chip company designs vs. buys
+
+Real chip companies, Nvidia included, don't build everything themselves:
+
+- **Memory (G3):** HBM stacks are bought from SK hynix, Samsung or Micron.
+  We design the memory controller and how data moves; the high-speed
+  physical connection (the "PHY") is normally licensed.
+- **Chip-to-chip links (G2):** NVLink is Nvidia's private technology. We
+  build on open industry standards such as UALink and Ultra Ethernet. The
+  high-speed transmitters (SerDes) are normally licensed.
+- **Cooling (G5):** liquid cooling belongs to the server and the data centre,
+  not the chip. Our part is keeping the chip's power low and even so it is
+  easier and cheaper to cool.
+
+Knowing this split is part of a credible pitch: it shows funders exactly
+which parts are Imbewu's own invention and which are bought in.
+
 ## Why Africa needs this
 
 - **Sovereignty.** Africa currently depends entirely on chips designed and

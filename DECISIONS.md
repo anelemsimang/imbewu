@@ -41,3 +41,17 @@ Founder's decision. Stages 1-3 (edge chips, inference cards, model-support
 products) are removed from the plan. All work goes to the data-centre AI
 accelerator and its simulation-based pitch package. Replaces the "ladder"
 in earlier versions of VISION.md.
+
+### D-008 - Five design goals
+Founder's definition of what the data-centre chip must achieve: massive
+parallel computation with flexible precision (G1), high-speed chip-to-chip
+communication (G2), ultra-fast memory bandwidth (G3), low-latency,
+high-throughput inference (G4) and performance per watt (G5). Each roadmap
+item is tagged with the goals it serves.
+
+### D-009 - Open standards for precision and chip-to-chip links
+Low-precision formats follow the open OCP Microscaling (MX) specification
+(MXFP8, MXFP4 and others) rather than a private format. Chip-to-chip links
+build on open industry standards (UALink, Ultra Ethernet) rather than
+copying NVLink. Both keep the design clean (D-003) and compatible with
+the wider industry.
