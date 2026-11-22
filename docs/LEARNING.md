@@ -242,3 +242,15 @@ A simple adder passes the carry from digit to digit, like adding by hand:
 48 digits means 48 steps in a row. A parallel ("Kogge-Stone") adder works
 out all the carries at once in about 6 steps, using more gates. Real chips
 use parallel adders on their critical paths.
+
+## Double buffering
+Like a chef with two chopping boards: while cooking from one board, an
+assistant prepares the next ingredients on the other. If the assistant is
+fast enough, the chef never waits. The tile's memory is split in two
+halves for exactly this reason.
+
+## Arithmetic intensity
+How many calculations each number fetched from memory feeds. Big matrix
+multiplies reuse every number many times (high intensity), so compute is
+the limit; small ones barely reuse anything (low intensity), so memory is
+the limit, however fast the engine.

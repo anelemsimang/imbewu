@@ -46,9 +46,10 @@ design effort (see DECISIONS.md, D-013).
 - [ ] Waveform walkthrough for Anele
 
 ## Phase 2 - The Imbewu tile  (G1, G3, G5)
-- [ ] Local memory (SRAM) inside the tile to hold weights and activations
-- [ ] Data mover that loads the next block while the current one computes,
-      so the engines never wait for memory
+- [x] Local memory (SRAM) inside the tile, two halves per operand (`rtl/tile_v1.v`)
+- [x] Data mover that loads the next block while the current one computes:
+      85% engine busy when memory keeps up, bit exact on 6 test runs
+- [ ] Keep weights resident across commands; overlap transfer start-up delays
 - [ ] A small RISC-V control core per tile (from an open-source design)
 - [ ] Vector unit for the non-matmul parts of AI (activations, softmax, normalisation)
 - [ ] Tile instruction set, documented
@@ -136,5 +137,6 @@ deliberately planted bugs, real model data.
 Phase 1. Version 5 engine done and is the reference design (D-018): FP32
 block totals inside the cells, mixed formats, shared two-tick adders.
 First physical estimate done (W2, D-019): about 400 MHz logic-only and
-3,580 um^2 per cell at 45 nm. Next: Phase 2 (tile memory and data mover), with
-placement and routing (OpenROAD) and a power estimate when tools allow.
+3,580 um^2 per cell at 45 nm. Phase 2 started: tile version 1 (SRAM halves, data mover, scheduler) hides
+main-memory waiting. Next: weights kept resident, a RISC-V control core,
+and the vector unit; placement and power when tools allow.

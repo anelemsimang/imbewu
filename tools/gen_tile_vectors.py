@@ -20,17 +20,15 @@ from gen_v4_vectors import FP4, INT8, rand_code, val  # noqa: E402
 BLOCK = 32
 
 
-def main():
-    N, MT, NT, KB, fa, fb = (int(v) for v in sys.argv[1:7])
-    pre = sys.argv[7]
-    random.seed(int(sys.argv[8]) if len(sys.argv) > 8 else 1)
+def build(N, MT, NT, KB, fa, fb):
+    """Random A, B in MX formats laid out as matmul_unit expects, plus the
+    expected C. Returns lists of memory words and the configuration."""
     M, Nc, K = MT * N, NT * N, BLOCK * KB
     pair = fa == FP4 and fb == FP4
     A = [[rand_code(fa, "rand") for _ in range(K)] for _ in range(M)]
     B = [[rand_code(fb, "rand") for _ in range(Nc)] for _ in range(K)]
     sa = [[random.randrange(112, 142) for _ in range(KB)] for _ in range(M)]
     sb = [[random.randrange(112, 142) for _ in range(Nc)] for _ in range(KB)]
-
     beats = K // 2 if pair else K
     bb = BLOCK // 2 if pair else BLOCK
 
@@ -43,49 +41,57 @@ def main():
             w |= v << (n * width)
         return w
 
-    hexw = lambda bits: (bits + 3) // 4
-    with open(pre + "_a.hex", "w") as fh:
-        for mt in range(MT):
-            for t in range(beats):
-                if pair:
-                    ln = [A[mt * N + i][2 * t] | (A[mt * N + i][2 * t + 1] << 4) for i in range(N)]
-                else:
-                    ln = [lane(fa, A[mt * N + i][t]) for i in range(N)]
-                fh.write(f"{word(ln):0{hexw(8 * N)}x}\n")
-    with open(pre + "_b.hex", "w") as fh:
-        for nt in range(NT):
-            for t in range(beats):
-                if pair:
-                    ln = [B[2 * t][nt * N + j] | (B[2 * t + 1][nt * N + j] << 4) for j in range(N)]
-                else:
-                    ln = [lane(fb, B[t][nt * N + j]) for j in range(N)]
-                fh.write(f"{word(ln):0{hexw(8 * N)}x}\n")
-    with open(pre + "_sa.hex", "w") as fh:
-        for mt in range(MT):
-            for kb in range(KB):
-                fh.write(f"{word([sa[mt * N + i][kb] for i in range(N)]):0{hexw(8 * N)}x}\n")
-    with open(pre + "_sb.hex", "w") as fh:
-        for nt in range(NT):
-            for kb in range(KB):
-                fh.write(f"{word([sb[kb][nt * N + j] for j in range(N)]):0{hexw(8 * N)}x}\n")
-
+    out = dict(a=[], b=[], sa=[], sb=[], c=[],
+               cfg=dict(mt=MT, nt=NT, beats=beats, bb=bb, nb=KB, fa=fa, fb=fb))
+    for mt in range(MT):
+        for t in range(beats):
+            if pair:
+                ln = [A[mt * N + i][2 * t] | (A[mt * N + i][2 * t + 1] << 4) for i in range(N)]
+            else:
+                ln = [lane(fa, A[mt * N + i][t]) for i in range(N)]
+            out["a"].append(word(ln))
+    for nt in range(NT):
+        for t in range(beats):
+            if pair:
+                ln = [B[2 * t][nt * N + j] | (B[2 * t + 1][nt * N + j] << 4) for j in range(N)]
+            else:
+                ln = [lane(fb, B[t][nt * N + j]) for j in range(N)]
+            out["b"].append(word(ln))
+    for mt in range(MT):
+        for kb in range(KB):
+            out["sa"].append(word([sa[mt * N + i][kb] for i in range(N)]))
+    for nt in range(NT):
+        for kb in range(KB):
+            out["sb"].append(word([sb[kb][nt * N + j] for j in range(N)]))
     adj = 6 * (fa == INT8) + 6 * (fb == INT8)
-    with open(pre + "_c.hex", "w") as fh:
-        for m in range(M):
-            for nt in range(NT):
-                row = []
-                for j in range(N):
-                    n = nt * N + j
-                    acc = 0
-                    for kb in range(KB):
-                        s = sum(val(fa, A[m][k]) * val(fb, B[k][n])
-                                for k in range(kb * BLOCK, (kb + 1) * BLOCK))
-                        acc = fadd_ref(acc, s, sa[m][kb] + sb[kb][n] - 272 - adj)
-                    row.append(acc)
-                fh.write(f"{word(row, 32):0{hexw(32 * N)}x}\n")
+    for m in range(M):
+        for nt in range(NT):
+            row = []
+            for j in range(N):
+                n = nt * N + j
+                acc = 0
+                for kb in range(KB):
+                    s = sum(val(fa, A[m][k]) * val(fb, B[k][n])
+                            for k in range(kb * BLOCK, (kb + 1) * BLOCK))
+                    acc = fadd_ref(acc, s, sa[m][kb] + sb[kb][n] - 272 - adj)
+                row.append(acc)
+            out["c"].append(word(row, 32))
+    return out
+
+
+def main():
+    N, MT, NT, KB, fa, fb = (int(v) for v in sys.argv[1:7])
+    pre = sys.argv[7]
+    random.seed(int(sys.argv[8]) if len(sys.argv) > 8 else 1)
+    r = build(N, MT, NT, KB, fa, fb)
+    hexw = lambda bits: (bits + 3) // 4
+    for key, width in (("a", 8), ("b", 8), ("sa", 8), ("sb", 8), ("c", 32)):
+        with open(f"{pre}_{key}.hex", "w") as fh:
+            fh.writelines(f"{w:0{hexw(width * N)}x}\n" for w in r[key])
+    c = r["cfg"]
     with open(pre + "_cfg.hex", "w") as fh:
-        fh.write(f"{MT:x}\n{NT:x}\n{beats:x}\n{bb:x}\n{KB:x}\n{fa:x}\n{fb:x}\n")
-    print(f"tile vectors: C {M}x{Nc}, K {K}, {MT * NT} jobs of {beats} beats")
+        fh.write(f"{c['mt']:x}\n{c['nt']:x}\n{c['beats']:x}\n{c['bb']:x}\n{c['nb']:x}\n{c['fa']:x}\n{c['fb']:x}\n")
+    print(f"tile vectors: C {MT * N}x{NT * N}, K {BLOCK * KB}, {MT * NT} jobs of {c['beats']} beats")
 
 
 if __name__ == "__main__":

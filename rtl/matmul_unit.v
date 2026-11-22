@@ -37,6 +37,7 @@ module matmul_unit #(
     input  wire [1:0]      cfg_fb,
     output reg             busy,
     output reg             done,          // one-tick pulse when C is complete
+    output wire            feed,          // high on every tick the engine is fed a beat
     // memory read ports (data returns one tick after the address)
     output wire [AW-1:0]   a_addr,
     input  wire [N*8-1:0]  a_data,
@@ -102,6 +103,8 @@ module matmul_unit #(
     assign f_v = t_v; assign f_bl = t_bl; assign f_jl = t_jl; assign f_run = run;
     assign f_beat = beat; assign f_bib = bib; assign f_blk = blk; assign f_mt = mt; assign f_nt = nt;
 `endif
+
+    assign feed = t_v;
 
     // ---- the engine --------------------------------------------------------
     wire            o_valid;

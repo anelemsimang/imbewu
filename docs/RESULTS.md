@@ -468,3 +468,51 @@ be pinned down with these tools. A proper timing tool after placement
 on SKY130 and about 400 MHz at 45 nm, logic only.**
 
 **Not done yet:** placement and routing (OpenROAD), power, SRAM area.
+
+**Planted bugs after the adder rewrite:** 28 of 28 caught (the full set,
+re-run on the six-step adder).
+
+## 2026-11-22 - Phase 2 begins: the tile hides main-memory waiting (goals G3, G4)
+
+**What it is.** `rtl/tile_v1.v` (with `rtl/sram.v`): the engine and tiling
+controller, plus the tile's own memory (SRAM, in two halves for A, B,
+their scales and C), a data mover with one main-memory port, and a
+scheduler working through a list of matrix multiplies ("commands"). While
+the engine computes command k from one half, the data mover fetches
+command k+1 into the other half and sends command k-1's answers back to
+main memory. Main memory is modelled with a fixed delay (20 to 60 ticks per
+request) and limited bandwidth (one word every 1, 2, 3 or 4 ticks).
+
+**Checks** (`make test-tile-v1`): 6 runs of 6 commands each, engines 4x4,
+8x8 and 16x16, mixed shapes and formats: every answer word in main memory
+bit exact against the independent reference (6,000+ words). 3 planted
+scheduler bugs (wrong half, loading too early, overwriting unsent answers)
+all caught.
+
+**Does it hide the waiting?** 4x4 engine, 6 commands of 3x3 tiles,
+K = 96, FP8 x FP4, memory delay 40 ticks:
+
+| Main-memory bandwidth | Ticks | Engine busy | Limited by |
+|---|---|---|---|
+| 1 word per tick | 6,078 | 85% | compute: only the first fetch and the last write-back are not hidden (ideal about 5,960) |
+| 1 word per 2 ticks | 10,902 | 47% | memory |
+| 1 word per 4 ticks | 18,884 | 27% | memory |
+
+With small matrices (little reuse of each fetched number) the engine waits
+for memory even at full bandwidth (39-46%), as the performance model
+predicts: how much work each fetched number feeds ("arithmetic
+intensity") decides which side limits.
+
+**What this means.** The double-buffered tile works: when memory can keep
+up, the engine is fed continuously, and the total time is the compute time
+plus one fetch and one write-back. This is the mechanism a data-centre chip
+uses to approach its peak speed (G4), and it confirms that memory
+bandwidth (G3) is what limits small-batch work.
+
+**Limits of version 1.** One command at a time on the main-memory port,
+with a full memory delay at the start of each transfer; the data mover
+reads one C word per 4 memory words; commands must fit in one SRAM half
+(1,024 words); no reuse of A or B between commands (each command fetches
+both). Next: keep weights resident across commands and stream activations,
+overlap transfer start-up delays, and a small control processor (RISC-V)
+to write the command list.

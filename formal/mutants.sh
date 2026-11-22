@@ -48,6 +48,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         v5sim $src $m && r=missed || r=caught
     elif [ $kind = tile ]; then
         rm -rf $OUT/tile; OUT=$OUT/tile MM=$m tests/run_tile_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = tilev1 ]; then
+        rm -rf $OUT/tilev1; OUT=$OUT/tilev1 TILE=$m tests/run_tile_v1_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalmm ]; then
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -93,5 +95,10 @@ mutate $T "block counter never advances (wrong scales)"     's/if (last_inblk) b
 mutate $T "answers written to the wrong place"              's/c_addr <= (omt \* N + o_idx) \* cfg_nt + ont;/c_addr <= (omt * N + o_idx) + ont;/' tile
 mutate $T "job end marked at every block end"               's/t_jl <= run \& last_beat;/t_jl <= run \& last_inblk;/' formalmm
 mutate $T "skips every other row of tiles"                  's/begin nt <= 0; mt <= mt + 1'"'"'b1; end/begin nt <= 0; mt <= mt + 2'"'"'d2; end/' formalmm
+echo "tile (Phase 2):"
+TL=rtl/tile_v1.v
+mutate $TL "data mover loads into the half the engine is using" 's/dhalf <= nld\[0\];/dhalf <= ~nld[0];/' tilev1
+mutate $TL "next command loaded before its half is free"       's/wire can_load  = (nld < n_cmds) \&\& (nld < ncomp + 2);/wire can_load  = (nld < n_cmds) \&\& (nld < ncomp + 3);/' tilev1
+mutate $TL "engine overwrites answers not yet sent back"       's/ncomp < nld \&\& ncomp < nst + 2/ncomp < nld \&\& ncomp < nst + 3/' tilev1
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]
