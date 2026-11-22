@@ -62,3 +62,17 @@ instead of using a central controller to start and stop jobs. Jobs run back
 to back, utilisation rises from ~33% to 99.5%, and the shared dimension K
 can vary per job. Cost: ~7% more logic. Version 1 (`rtl/systolic_array.v`)
 stays in the repository as the simple reference design.
+
+### D-011 - Multi-format engine with exact fixed-point accumulation
+Version 3 supports INT8, FP8 E4M3 and FP4 E2M1 (OCP MX v1.0) in one cell,
+selected per job by a tag that travels with the data. Products are summed
+exactly in a 48-bit fixed-point total (smallest step 2^-18) instead of a
+rounding floating-point adder: simpler, exactly verifiable, no rounding error
+within a block. MX block scales are applied on the way out as an exponent.
+Cost: the cell is 2.2x the INT8-only cell; reduction plans are in
+docs/RESULTS.md. FP4 packs two numbers per lane for 2x speed.
+
+### D-012 - Independent Python reference model for verification
+Expected answers for the multi-format engine come from tools/gen_mx_vectors.py,
+which decodes numbers with the public ml_dtypes library, not with logic copied
+from the design, so a shared mistake in design and test is unlikely.

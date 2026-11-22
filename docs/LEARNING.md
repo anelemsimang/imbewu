@@ -96,3 +96,33 @@ how many jobs finish per second. Streaming barely changes latency but triples
 throughput. For a data centre serving millions of users, throughput is usually
 what pays the bills; for one person chatting, latency is what they feel.
 Goal G4 is about balancing both.
+
+## Floating-point numbers (FP8, FP4)
+Whole numbers (INT8) can't hold fractions or very large and very small values
+at the same time. **Floating-point** numbers work like scientific notation:
+a few digits plus a power of two, e.g. 1.5 x 2^3 = 12. The fewer bits, the
+smaller and faster the circuit, but the rougher the number:
+- **FP8 (E4M3)**: 8 bits, values from about 0.002 up to 448.
+- **FP4 (E2M1)**: 4 bits, only 16 possible values: 0, 0.5, 1, 1.5, 2, 3, 4, 6
+  (and their negatives). Two fit in the space of one FP8 number, so the chip
+  can do twice as many per tick.
+
+## Microscaling (MX)
+How can AI work with numbers as rough as FP4? Trick: groups of numbers (a
+"block", usually 32) share one extra scale factor, a power of two. The block's
+numbers say "how big relative to each other"; the shared scale says "how big
+overall". This open standard from the Open Compute Project (backed by AMD,
+Arm, Intel, Meta, Microsoft, Nvidia, Qualcomm) is what Imbewu follows.
+
+## Exact accumulation
+Our engine adds every product into a wide 48-bit total whose smallest step is
+tiny enough to hold any FP8 product exactly. So no rounding happens inside a
+block, and results are bit-for-bit predictable. That makes the chip easier to
+verify, and trustworthy for training, where small rounding errors can pile up.
+
+## Independent reference model
+To test a chip you need the correct answers from somewhere else. If the same
+person writes the design and the answer-checker in the same way, both can share
+the same mistake. So our expected answers come from a separate Python program
+using a well-known public library (ml_dtypes). Two independent routes agreeing
+on 336,000 answers is strong evidence.

@@ -18,8 +18,12 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
 - [x] Long products: the shared dimension K can be any length >= N
 - [ ] Larger matrices: a controller that breaks big matrices into blocks the
       grid can handle ("tiling") and schedules them
-- [ ] Precision flexibility: FP8 and FP4 using the open OCP Microscaling (MX)
-      formats, plus BF16 for training; one engine that switches between them
+- [x] Precision flexibility v1 (`rtl/systolic_mx.v`): INT8, FP8 E4M3 and FP4 E2M1
+      with OCP MX block scales, format switchable per job, exact results,
+      FP4 at 2x speed; 0 errors in 336,000 checked results (see docs/RESULTS.md)
+- [ ] Precision v2: shared exponent alignment per block (smaller cells),
+      4x FP4 packing, FP8 E5M2, NaN handling
+- [ ] BF16 for training, and FP32 totals across many MX blocks
 - [ ] Accuracy check: run each format on real AI model data and measure the loss
 - [ ] First energy-per-operation estimate for each format
 - [ ] Waveform walkthrough for Anele
@@ -54,4 +58,4 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Next step: precision flexibility (FP8 / FP4 using the OCP MX formats).
+Phase 1. Next step: accuracy check of INT8 / FP8 / FP4 on real AI model data.

@@ -68,3 +68,54 @@ exactly what G1 and G5 ask for.
 **Process note:** the first run of the new test reported thousands of errors.
 The cause was in the test itself (the checker and the data generator shared
 loop counters), not in the chip design. Fixed before any result was recorded.
+
+## 2026-11-22 - Multi-format engine (version 3): INT8, FP8, FP4 with MX scales (G1)
+
+Design: `rtl/systolic_mx.v` + `rtl/pe_mx.v`. Each job picks its number format
+(INT8, FP8 E4M3 or FP4 E2M1, per the OCP Microscaling v1.0 element
+definitions), and the format travels with the data, so jobs of different
+formats run back to back. FP4 packs two numbers per lane. Each row of A and
+each column of B carries a shared MX block scale (E8M0). Every product is
+added exactly in a 48-bit fixed-point total, so results have **no rounding
+error at all**; output = 48-bit value x 2^exponent.
+
+Expected answers come from an independent Python model
+(`tools/gen_mx_vectors.py`), which decodes numbers with the `ml_dtypes`
+library rather than with my hardware logic, and sums with exact integers.
+
+Each size ran 5 scenarios of 200 jobs (K from N to 3N beats): all-INT8,
+all-FP8, all-FP4, mixed formats back to back, and mixed with 30% random
+gaps. Special cases included: maximum values (+/-448 FP8, +/-6 FP4,
+-128 INT8), +0/-0, FP8 subnormals, and extreme scales (2^-127 and 2^127).
+
+| Grid | Results checked | Errors | INT8 / FP8 multiplies per cell per tick | FP4 multiplies per cell per tick |
+|------|-----------------|--------|-------------------------------------------|----------------------------------|
+| 4x4   | 16,000  | 0 | 0.99 | 1.99 |
+| 8x8   | 64,000  | 0 | 0.99 | 1.99 |
+| 16x16 | 256,000 | 0 | 0.99 | 1.98 |
+
+**Test strength check:** three planted bugs, each caught: wrong FP8
+subnormal handling (694 errors), wrong FP4 subnormal handling (790 errors),
+scale exponent off by one (800 errors, every row).
+
+**Size (Yosys generic cells):**
+
+| | One cell | 4x4 grid | 8x8 grid |
+|---|---|---|---|
+| Version 2 (INT8 only) | 1,216 | 20,346 | 80,872 |
+| Version 3 (INT8/FP8/FP4) | 2,646 | 46,517 | 183,605 |
+
+**Honest assessment.** The multi-format cell is 2.2x the size of the
+INT8-only cell. FP4's double speed wins that back, so per unit of silicon
+FP4 matches INT8 and FP8 is about half. The main costs are the 48-bit exact
+total (vs 32-bit) and a shifter in every cell. This is the expected first
+version; the big efficiency gain of FP8/FP4 shows up against 16-bit and
+32-bit formats (BF16/FP32), which data-centre chips also need and which are
+far larger. Planned improvements:
+1. Line up exponents once per block instead of in every cell (shared shifter).
+2. Pack four FP4 numbers per lane (4x speed) using 16-bit lanes.
+3. Add BF16 so the comparison that matters for data centres can be measured.
+
+**Not supported yet:** the FP8 "not a number" code (S.1111.111) and the
+E8M0 NaN scale (0xFF); FP8 E5M2 (used for training gradients); combining
+several MX blocks into one FP32 total. All are on the roadmap.

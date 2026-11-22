@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx synth clean
 
-test: test-mac test-systolic test-stream
+test: test-mac test-systolic test-stream test-mx
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -29,6 +29,21 @@ test-stream:
 	  iverilog -g2012 -DGRID_N=$$n -DJOBS=300 -o $(BUILD)/tb_stream_$$n \
 	    rtl/pe_stream.v rtl/systolic_stream.v tests/tb_systolic_stream.v || exit 1; \
 	  vvp -n $(BUILD)/tb_stream_$$n || exit 1; \
+	done
+
+# Version 3: multi-format engine (INT8 / FP8 / FP4 with MX scales).
+# Expected answers come from an independent Python model (tools/), which
+# needs: pip install -r tools/requirements.txt
+MX_SCENARIOS := int8 fp8 fp4 mixed mixed_gaps
+test-mx:
+	@mkdir -p $(BUILD)/vectors
+	@for n in $(SIZES); do \
+	  python3 tools/gen_mx_vectors.py $$n $(BUILD)/vectors || exit 1; \
+	  iverilog -g2012 -DGRID_N=$$n -o $(BUILD)/tb_mx_$$n \
+	    rtl/pe_mx.v rtl/systolic_mx.v tests/tb_systolic_mx.v || exit 1; \
+	  for s in $(MX_SCENARIOS); do \
+	    vvp -n $(BUILD)/tb_mx_$$n +PRE=$(BUILD)/vectors/mx_N$${n}_$$s || exit 1; \
+	  done; \
 	done
 
 synth:

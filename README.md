@@ -20,6 +20,7 @@ Start here:
 ```
 rtl/     chip designs, written in Verilog
 tests/   automated tests (testbenches) for each design
+tools/   Python helpers, e.g. independent reference models for tests
 docs/    explanations and architecture documents
 ```
 
@@ -27,6 +28,7 @@ docs/    explanations and architecture documents
 
 Requires Icarus Verilog and Yosys (both free and open source).
 On Ubuntu: `sudo apt-get install iverilog yosys`.
+Python packages for the reference models: `pip install -r tools/requirements.txt`.
 
 ```bash
 make test    # simulate every design and check every answer
