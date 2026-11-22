@@ -1,2 +1,4 @@
 build/
 *.vcd
+__pycache__/
+*.pyc
