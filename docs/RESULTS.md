@@ -426,8 +426,9 @@ adder cases, every engine and tiling test, every proof re-run):
 | Adder S3 (leading one, shift amount) | 7,724 | 1,587 |
 | Adder S4 (round, pack) | 5,870 | 1,434 |
 | *Version 3 cell, for comparison* | *11,545* | *2,175* |
-| **Slowest step = clock limit** | **7.7 ns: about 130 MHz** | **1.66 ns: about 600 MHz** |
-| Whole 4x4 engine, adders shared by 4 (check) | 8,306: about 120 MHz | (running) |
+| Slowest single part | 7.7 ns | 1.66 ns |
+| Whole 4x4 engine, adders shared by 4, measured flat (check) | 8,306: about 120 MHz | 2,314 to 2,768 (two runs): about 360-430 MHz |
+| Same engine measured module by module | - | 1,672 |
 
 These are logic-only figures. Wires (after placement and routing) and the
 registers' own timing will lower the real clock, so treat them as upper
@@ -441,13 +442,13 @@ bounds. That is the next W2 step.
 | One shared adder: logic + about 630 pipeline registers | about 54,200 | about 11,200 |
 | **Cell including its 1/16 share of an adder** | **about 17,600** | **about 3,580** |
 | 32x32 engine (1,024 cells) | about 18 mm^2 | about 3.7 mm^2 |
-| Check: whole 4x4 engine (16 cells, 4 adders), measured | 432,174 (parts estimate: 444,700, within 3%) | (running) |
+| Check: whole 4x4 engine (16 cells, 4 adders), measured | 432,174 (parts estimate: 444,700, within 3%) | 93,526 (parts estimate: 90,900, within 3%) |
 
 **What this means for the pitch.**
 1. The engine works in real gates of a real process; nothing in it needs
    unusual technology.
-2. At 45 nm, one 32x32 engine at 600 MHz would give about 1.2 TFLOPS of FP8
-   (2.5 in FP4) in about 3.7 mm^2.
+2. At 45 nm, one 32x32 engine at about 400 MHz would give about 0.8 TFLOPS
+   of FP8 (1.6 in FP4) in about 3.7 mm^2.
 3. The concept chip's 256 engines would need about 940 mm^2 at 45 nm for
    the engines alone, more than the largest chip a factory can print (about
    850 mm^2), before adding memory, HBM interfaces and links. A data-centre
@@ -456,8 +457,14 @@ bounds. That is the next W2 step.
    numbers must come with a foundry or design-house partner (W5). The
    concept chip's assumed 1.5 GHz is not yet supported by any measurement.
 
-The whole 4x4 engine's longest path (8.3 ns on SKY130) is a little longer
-than any single part: it includes the hand-off from the cells to the shared
-adder. Area measured on the whole engine matches the sum of the parts.
+Area measured on the whole engine matches the sum of the parts. Speed does
+not quite: measured as one flat design, the whole engine's longest path is
+longer than any single part (8.3 ns on SKY130; 2.3 to 2.8 ns at 45 nm, the
+mapping tool being heuristic), while measured module by module it is
+1.7 ns at 45 nm. One cause was found and fixed (the hand-off from the cells
+to the shared adder now selects first and adds after); the rest could not
+be pinned down with these tools. A proper timing tool after placement
+(OpenROAD/OpenSTA) is needed. **Headline, stated cautiously: about 120 MHz
+on SKY130 and about 400 MHz at 45 nm, logic only.**
 
 **Not done yet:** placement and routing (OpenROAD), power, SRAM area.

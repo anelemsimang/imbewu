@@ -135,6 +135,6 @@ deliberately planted bugs, real model data.
 ## Current position
 Phase 1. Version 5 engine done and is the reference design (D-018): FP32
 block totals inside the cells, mixed formats, shared two-tick adders.
-First physical estimate done (W2, D-019): about 600 MHz logic-only and
+First physical estimate done (W2, D-019): about 400 MHz logic-only and
 3,580 um^2 per cell at 45 nm. Next: Phase 2 (tile memory and data mover), with
 placement and routing (OpenROAD) and a power estimate when tools allow.

@@ -233,7 +233,7 @@ licence from the foundry.
 ## Clock speed and the "longest path"
 Every tick, signals must travel from one storage register through the
 logic to the next register before the next tick starts. The slowest such
-path sets the fastest clock: a 1.65 ns path allows about 600 MHz. To go
+path sets the fastest clock: a 2.5 ns path allows about 400 MHz. To go
 faster, long paths are cut into shorter steps with registers in between
 ("pipelining"), which is what we did to the shared FP32 adder.
 
