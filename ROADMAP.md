@@ -49,7 +49,9 @@ design effort (see DECISIONS.md, D-013).
 - [x] Local memory (SRAM) inside the tile, two halves per operand (`rtl/tile_v1.v`)
 - [x] Data mover that loads the next block while the current one computes:
       85% engine busy when memory keeps up, bit exact on 6 test runs
-- [ ] Keep weights resident across commands; overlap transfer start-up delays
+- [x] Keep weights resident across commands (`rtl/tile_v2.v`): 2.5x fewer
+      memory reads, 1.9-2.2x faster on decode-style work
+- [ ] Overlap transfer start-up delays
 - [ ] A small RISC-V control core per tile (from an open-source design)
 - [ ] Vector unit for the non-matmul parts of AI (activations, softmax, normalisation)
 - [ ] Tile instruction set, documented
@@ -137,6 +139,6 @@ deliberately planted bugs, real model data.
 Phase 1. Version 5 engine done and is the reference design (D-018): FP32
 block totals inside the cells, mixed formats, shared two-tick adders.
 First physical estimate done (W2, D-019): about 400 MHz logic-only and
-3,580 um^2 per cell at 45 nm. Phase 2 started: tile version 1 (SRAM halves, data mover, scheduler) hides
-main-memory waiting. Next: weights kept resident, a RISC-V control core,
-and the vector unit; placement and power when tools allow.
+3,580 um^2 per cell at 45 nm. Phase 2: tile version 2 keeps weights in the tile and hides main-memory
+waiting. Next: overlap transfer delays, a RISC-V control core, and the
+vector unit; placement and power when tools allow.

@@ -1,7 +1,7 @@
 // tb_tile_v1.v - checks the Imbewu tile on a list of matrix multiplies, with
 // a model of main memory (HBM) that answers each read LAT ticks later and
 // accepts a request only on some ticks (limited bandwidth).
-// Settings: -DGRID_N=4   plusargs: +PRE=<prefix> +LAT=<ticks> +EVERY=<k>
+// Settings: -DGRID_N=4 [-DTILE_V2]   plusargs: +PRE=<prefix> +LAT=<ticks> +EVERY=<k>
 //   (main memory accepts one request every k ticks: bandwidth 1/k words/tick)
 `timescale 1ns/1ps
 `ifndef GRID_N
@@ -17,7 +17,12 @@ module tb_tile_v1;
     reg  mem_rvalid = 0; reg [W8-1:0] mem_rdata = 0;
     wire [31:0] ticks_busy, ticks_engine;
 
-    tile_v1 #(.N(N)) dut (.clk(clk), .rst(rst), .cmd_we(cmd_we), .cmd_idx(cmd_idx),
+`ifdef TILE_V2
+    tile_v2 #(.N(N)) dut (
+`else
+    tile_v1 #(.N(N)) dut (
+`endif
+       .clk(clk), .rst(rst), .cmd_we(cmd_we), .cmd_idx(cmd_idx),
         .cmd_data(cmd_data), .n_cmds(n_cmds), .start(start), .busy(busy), .done(done),
         .mem_req(mem_req), .mem_we(mem_we), .mem_addr(mem_addr), .mem_wdata(mem_wdata),
         .mem_ready(mem_ready), .mem_rvalid(mem_rvalid), .mem_rdata(mem_rdata),

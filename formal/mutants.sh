@@ -50,6 +50,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         rm -rf $OUT/tile; OUT=$OUT/tile MM=$m tests/run_tile_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = tilev1 ]; then
         rm -rf $OUT/tilev1; OUT=$OUT/tilev1 TILE=$m tests/run_tile_v1_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = tilev2 ]; then
+        rm -rf $OUT/tilev2; OUT=$OUT/tilev2 TILE=$m tests/run_tile_v2_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalmm ]; then
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -100,5 +102,10 @@ TL=rtl/tile_v1.v
 mutate $TL "data mover loads into the half the engine is using" 's/dhalf <= nld\[0\];/dhalf <= ~nld[0];/' tilev1
 mutate $TL "next command loaded before its half is free"       's/wire can_load  = (nld < n_cmds) \&\& (nld < ncomp + 2);/wire can_load  = (nld < n_cmds) \&\& (nld < ncomp + 3);/' tilev1
 mutate $TL "engine overwrites answers not yet sent back"       's/ncomp < nld \&\& ncomp < nst + 2/ncomp < nld \&\& ncomp < nst + 3/' tilev1
+echo "tile version 2 (weights kept):"
+T2=rtl/tile_v2.v
+mutate $T2 "weights overwritten while an earlier command still needs them" 's/|| (ncomp > lu\[nslot\]);/|| 1'"'"'b1;/' tilev2
+mutate $T2 "engine reads the other weight slot"                 's/comp_slot <= f_slot(cmds\[ncomp\[3:0\]\]);/comp_slot <= ~f_slot(cmds[ncomp[3:0]]);/' tilev2
+mutate $T2 "weights written into the activation half"           's/ld_we_b <= 1'"'"'b1; ld_baddr <= {dslot,/ld_we_b <= 1'"'"'b1; ld_baddr <= {dhalf,/' tilev2
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

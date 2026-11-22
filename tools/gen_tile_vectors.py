@@ -20,15 +20,20 @@ from gen_v4_vectors import FP4, INT8, rand_code, val  # noqa: E402
 BLOCK = 32
 
 
-def build(N, MT, NT, KB, fa, fb):
+def build(N, MT, NT, KB, fa, fb, reuse=None):
     """Random A, B in MX formats laid out as matmul_unit expects, plus the
-    expected C. Returns lists of memory words and the configuration."""
+    expected C. Returns lists of memory words and the configuration.
+    reuse: the "raw" entry of an earlier result, to use the same B (weights)."""
     M, Nc, K = MT * N, NT * N, BLOCK * KB
     pair = fa == FP4 and fb == FP4
     A = [[rand_code(fa, "rand") for _ in range(K)] for _ in range(M)]
-    B = [[rand_code(fb, "rand") for _ in range(Nc)] for _ in range(K)]
+    if reuse is None:
+        B = [[rand_code(fb, "rand") for _ in range(Nc)] for _ in range(K)]
     sa = [[random.randrange(112, 142) for _ in range(KB)] for _ in range(M)]
-    sb = [[random.randrange(112, 142) for _ in range(Nc)] for _ in range(KB)]
+    if reuse is None:
+        sb = [[random.randrange(112, 142) for _ in range(Nc)] for _ in range(KB)]
+    else:
+        B, sb = reuse
     beats = K // 2 if pair else K
     bb = BLOCK // 2 if pair else BLOCK
 
@@ -41,7 +46,7 @@ def build(N, MT, NT, KB, fa, fb):
             w |= v << (n * width)
         return w
 
-    out = dict(a=[], b=[], sa=[], sb=[], c=[],
+    out = dict(a=[], b=[], sa=[], sb=[], c=[], raw=(B, sb),
                cfg=dict(mt=MT, nt=NT, beats=beats, bb=bb, nb=KB, fa=fa, fb=fb))
     for mt in range(MT):
         for t in range(beats):

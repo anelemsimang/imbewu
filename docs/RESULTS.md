@@ -516,3 +516,38 @@ reads one C word per 4 memory words; commands must fit in one SRAM half
 both). Next: keep weights resident across commands and stream activations,
 overlap transfer start-up delays, and a small control processor (RISC-V)
 to write the command list.
+
+## 2026-11-22 - Tile version 2: weights stay in the tile
+
+**What changed.** `rtl/tile_v2.v`: B (a model layer's weights) and its
+scales live in two "weight slots" that are not swapped every command.
+Each command names its slot; a command that brings new weights loads them
+there, and the following commands reuse them and fetch only new
+activations (A). This is how language models run: the same layer weights
+serve many batches of tokens. A slot is overwritten only when every
+earlier command using it has been computed.
+
+**Checks** (`make test-tile-v2`): 9 runs (engines 4x4, 8x8, 16x16; decode-
+style and mixed shapes; full and reduced memory bandwidth; slots
+alternating, and all groups sharing one slot): every answer bit exact.
+Planted bugs: engine reads the wrong slot, weights written into the
+activation half, weights overwritten while still needed: all 3 caught.
+The last one was missed at first, because tests that alternate slots
+never exercise that safety rule; a test where every group uses the same
+slot was added, and it is now caught (96 wrong answers).
+
+**The gain.** 4x4 engine, 3 groups of 5 commands, each command 1 tile of
+activation rows x 3 tiles of weights, K = 96, FP8 x FP4, memory delay 40:
+
+| Main-memory bandwidth | Weights fetched every command (version 1 behaviour) | Weights kept (version 2) |
+|---|---|---|
+| 1 word per tick | 5,940 reads, 10,720 ticks, engine busy 40% | 2,376 reads, 5,736 ticks, **engine busy 75%** |
+| 1 word per 2 ticks | 16,789 ticks, 25% | 7,567 ticks, **57%** |
+
+Keeping the weights cuts main-memory reads by 2.5x and makes the same
+work 1.9x to 2.2x faster.
+
+**Still to improve:** each transfer still waits the full memory delay
+before its first word (about 40 ticks here, paid twice per command); the
+first command of each group must fetch all its weights before computing.
+Next: overlap transfers, then the RISC-V control core.

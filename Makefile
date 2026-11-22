@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -106,6 +106,10 @@ test-tile:
 # Phase 2 tile: SRAM halves, data mover, main-memory model (delay, bandwidth)
 test-tile-v1:
 	tests/run_tile_v1_tests.sh
+
+# Phase 2 tile version 2: weights kept in the tile across commands
+test-tile-v2:
+	tests/run_tile_v2_tests.sh
 
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)
