@@ -139,10 +139,16 @@ deliberately planted bugs, real model data.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Version 5 engine done and is the reference design (D-018): FP32
-block totals inside the cells, mixed formats, shared two-tick adders.
-First physical estimate done (W2, D-019): about 400 MHz logic-only and
-3,580 um^2 per cell at 45 nm. Phase 2: tile version 2 keeps weights in the tile and hides main-memory
-waiting. Tile version 3 fetches weights well ahead and is run by its own RISC-V
-control core. Next: the
-vector unit; placement and power when tools allow.
+Phase 1 is essentially done: the version 5 engine is the reference design
+(D-018): exact block sums, FP32 totals, mixed formats, shared pipelined
+adders, formally proven control, first physical estimate (about 400 MHz
+logic-only and 3,580 um^2 per cell at 45 nm, D-019). Open Phase 1 items:
+energy per operation, waveform walkthrough, precision extras.
+
+Phase 2 is under way: the tile (version 3) has double-buffered SRAM,
+weights kept across commands and fetched well ahead, overlapped memory
+transfers, and its own RISC-V control core running a C driver.
+
+Next: hide the driver's setup time, the vector unit (softmax,
+normalisation, activations), and the first step of the software stack
+(W3): turn a PyTorch layer into tile commands automatically.
