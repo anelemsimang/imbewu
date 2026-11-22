@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell formal mutants synth clean
 
-test: test-mac test-systolic test-stream test-mx
+test: test-mac test-systolic test-stream test-mx test-cell
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -45,6 +45,23 @@ test-mx:
 	    vvp -n $(BUILD)/tb_mx_$$n +PRE=$(BUILD)/vectors/mx_N$${n}_$$s || exit 1; \
 	  done; \
 	done
+
+# One multi-format cell on every possible input (262,144 cases)
+test-cell:
+	@mkdir -p $(BUILD)
+	python3 tools/gen_cell_exhaustive.py $(BUILD)/cell_exh.hex
+	iverilog -g2012 -o $(BUILD)/tb_cell_exh rtl/pe_mx.v tests/tb_pe_mx_exhaustive.v
+	vvp -n $(BUILD)/tb_cell_exh +EXP=$(BUILD)/cell_exh.hex
+
+# Formal proof of the engine's output rules (needs the Yices solver,
+# installed by: pip install -r tools/requirements.txt)
+FORMAL_SIZES := 2 4 8
+formal:
+	@for n in $(FORMAL_SIZES); do formal/run.sh $$n || exit 1; done
+
+# Plant bugs on purpose and check the tests catch every one
+mutants: test-cell
+	formal/mutants.sh
 
 synth:
 	@mkdir -p $(BUILD)

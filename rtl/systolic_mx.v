@@ -37,6 +37,13 @@ module systolic_mx #(
     output reg  [IW-1:0]        out_row_idx,
     output reg  [N*48-1:0]      out_row,
     output reg  [N*10-1:0]      out_exp
+`ifdef FORMAL
+    // Internal state, visible only to the formal checker (formal/)
+    , output wire [N-1:0]       f_last_dly,
+    output wire                 f_wr_slot, f_rd_slot, f_cur_slot, f_draining,
+    output wire [IW-1:0]        f_rd_row,
+    output wire [N*8-1:0]       f_sa0, f_sa1, f_sb0, f_sb1
+`endif
 );
     localparam IW = $clog2(N) + 1;
 
@@ -119,6 +126,19 @@ module systolic_mx #(
     reg [N-1:0]  last_dly;
     reg [IW-1:0] rd_row;
     reg          draining;
+
+`ifdef FORMAL
+    assign f_last_dly = last_dly;
+    assign f_wr_slot  = wr_slot;
+    assign f_rd_slot  = rd_slot;
+    assign f_cur_slot = cur_slot;
+    assign f_draining = draining;
+    assign f_rd_row   = rd_row;
+    assign f_sa0 = sa_slot[0];
+    assign f_sa1 = sa_slot[1];
+    assign f_sb0 = sb_slot[0];
+    assign f_sb1 = sb_slot[1];
+`endif
 
     // Output exponent for every element of row r, from the slot's scales
     function [N*10-1:0] row_exp;

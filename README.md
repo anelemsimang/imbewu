@@ -20,6 +20,7 @@ Start here:
 ```
 rtl/     chip designs, written in Verilog
 tests/   automated tests (testbenches) for each design
+formal/  formal (mathematical) proofs of the designs' rules
 tools/   Python helpers, e.g. independent reference models for tests
 docs/    explanations and architecture documents
 ```
@@ -32,6 +33,8 @@ Python packages for the reference models: `pip install -r tools/requirements.txt
 
 ```bash
 make test    # simulate every design and check every answer
+make formal  # prove the engine's output rules for every possible input
+make mutants # plant bugs on purpose and check the tests catch them
 make synth   # convert designs to logic gates and report their size
 ```
 

@@ -61,9 +61,13 @@ design effort (see DECISIONS.md, D-013).
 ### W1 - Verification depth (limitation 3: "PASS doesn't prove it works")
 Already in place: random tests against independent reference models,
 deliberately planted bugs, real model data.
-- [ ] Formal verification with SymbiYosys (free): mathematically prove key
-      properties of each block (no lost or duplicated results, correct
-      read-out order, no overflow within the stated limits)
+- [x] Formal proof (Yosys + Yices, free) of the multi-format engine's output
+      rules: no lost or extra rows, correct order and timing, right scales
+      per job; all time, sizes 2x2 to 16x16 (`make formal`)
+- [x] Exhaustive test of one multi-format cell on all 262,144 inputs
+      (`make test-cell`) and 10 planted bugs all caught (`make mutants`)
+- [ ] Formal proof of no overflow within the stated limits, and of the
+      grid's sums (equivalence checking)
 - [ ] Coverage measurement: report which parts of each design the tests reached
 - [ ] Assertions inside the designs, checked during every simulation
 - [ ] Lint checks (Verilator) on every design, run by `make test`
@@ -117,6 +121,7 @@ deliberately planted bugs, real model data.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Accuracy check done (docs/RESULTS.md, 2026-11-22). Next: W1
-(formal verification of the multi-format engine) and W4 (early performance
-model), then the mixed FP4 x FP8 mode and the tiling controller.
+Phase 1. Accuracy check done; W1 first step done (exhaustive cell test,
+formal proof of the engine's output rules, planted-bug checks). Next: W4
+(early performance model), then the mixed FP4 x FP8 mode and the tiling
+controller.

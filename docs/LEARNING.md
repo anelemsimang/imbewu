@@ -148,3 +148,24 @@ Activations are the numbers flowing through the model while it reads your
 text; they change every time. Activations usually have a few very large
 values, so they suffer more from tiny formats like FP4. That is why
 "FP4 weights, FP8 activations" is a common compromise.
+
+## Formal verification
+A normal test tries some inputs and checks the answers. Formal verification
+hands the design and a list of rules to a "solver" program, which reasons
+about every possible input at once. It either proves the rule can never be
+broken, or produces the exact sequence of inputs that breaks it (a
+counter-example). Chip companies use it because some bugs only appear in
+rare situations that random tests never hit.
+
+## Proof by induction
+Like dominoes. Show the first domino falls (the rules hold for the first
+ticks after reset: the "base case"). Then show that any falling domino
+knocks over the next (if the rules held up to now, they hold on the next
+tick: the "induction step"). Then every domino falls: the rules hold
+forever. Helper rules ("invariants") are often needed so the solver can
+see why each step follows.
+
+## Mutation testing
+Testing the tests. We deliberately break the design in small ways and
+check that the tests notice. A test that still passes on a broken design is
+not protecting us.

@@ -168,3 +168,39 @@ FP4 accuracy techniques (smaller blocks, rotations, or training the model to
 expect FP4), which industry uses and which would narrow the FP4 gap. The
 1.5B model was scored on half as many tokens to save time. Raw numbers:
 `results/accuracy_*.json`.
+
+## 2026-11-22 - Verification depth (W1): exhaustive cell test and formal proof
+
+**1. Every possible input of one cell.** One multiply has only
+4 formats x 256 x 256 = 262,144 possible inputs, so all of them were tested
+(`make test-cell`, expected values from ml_dtypes). Result: 261,124 checked,
+0 errors. 1,020 cases skipped: those that use the FP8 "not a number" code,
+which is not supported yet. This is a complete check of the cell's decoding,
+multiplying and shifting, not a sample.
+
+**2. Formal proof of the engine's output rules** (`make formal`, Yosys with
+the free Yices solver). The solver considers every possible input sequence:
+any data, any format, any gaps, any scales, jobs back to back. Proven:
+
+| Rule | Meaning |
+|---|---|
+| R1 | Every job gives exactly N output rows, in order, each at a fixed time after the job's last beat |
+| R2 | No output row ever appears that does not belong to a job |
+| R3 | Every row carries its own job's scales, never the neighbouring job's |
+
+Proven by induction (holds for all time, not only for a test's length) at
+grid sizes 2x2, 4x4, 8x8 and 16x16. Run times on this machine: under 1 s,
+2 s, 13 s and 2 min 47 s. The proof needed 12 helper rules describing the
+engine's internal state; it also confirms that the busiest case (jobs back
+to back) is actually reachable, so the proof is not empty.
+
+**3. Testing the tests** (`make mutants`): 10 bugs planted one at a time,
+5 in the cell and 5 in the engine's control. All 10 caught. Examples: the
+FP4 high nibble ignored, the scale pointer stuck, the last row of each job
+dropped, the first row using the previous job's scales.
+
+**What is still not formally proven:** that the long sums inside the grid
+are right for every input. Those are checked by the exhaustive cell test
+plus 336,000 random simulation answers, not by proof. Solvers struggle with
+multipliers; the usual industry method is equivalence checking against a
+reference, planned later. Not done yet: coverage measurement, Verilator lint.
