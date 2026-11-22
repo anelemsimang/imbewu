@@ -126,3 +126,25 @@ person writes the design and the answer-checker in the same way, both can share
 the same mistake. So our expected answers come from a separate Python program
 using a well-known public library (ml_dtypes). Two independent routes agreeing
 on 336,000 answers is strong evidence.
+
+## Perplexity
+The standard accuracy score for a language model. The model reads real text
+and, at each word, guesses what comes next. Perplexity is roughly how many
+words it is "choosing between" on average. Lower is better. If rounding the
+numbers to FP8 moves perplexity from 13.8 to 14.3, the model got slightly
+less sure of itself; a jump to 33 means it got much worse.
+
+## Quantisation (and "fake quantisation")
+Quantisation means storing numbers with fewer bits (for example FP4 instead
+of FP32). It saves memory, energy and silicon, but adds rounding error. To
+measure the damage before any chip exists, we run the model normally on a
+computer but round every number to the chip's format just before each
+multiply. That gives the same answers the chip would give (we checked this
+exactly on one layer) without needing the chip.
+
+## Weights and activations
+Weights are the numbers the model learned during training; they are fixed.
+Activations are the numbers flowing through the model while it reads your
+text; they change every time. Activations usually have a few very large
+values, so they suffer more from tiny formats like FP4. That is why
+"FP4 weights, FP8 activations" is a common compromise.

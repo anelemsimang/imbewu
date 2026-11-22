@@ -1,0 +1,59 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B",
+  "dataset": "wikitext-2-raw-v1 test",
+  "seq": 1024,
+  "windows": 40,
+  "self_check": {
+    "fp8_mismatches": 0,
+    "fp4_mismatches": 0,
+    "fp4_ties_match": true,
+    "samples": 200000
+  },
+  "results": [
+    {
+      "config": "FP32 (reference)",
+      "weights": "none",
+      "activations": "none",
+      "perplexity": 10.258,
+      "change_pct": 0.0,
+      "tokens": 40920,
+      "seconds": 541
+    },
+    {
+      "config": "MXINT8",
+      "weights": "mxint8",
+      "activations": "mxint8",
+      "perplexity": 10.286,
+      "change_pct": 0.28,
+      "tokens": 40920,
+      "seconds": 481
+    },
+    {
+      "config": "MXFP8 E4M3",
+      "weights": "mxfp8",
+      "activations": "mxfp8",
+      "perplexity": 10.445,
+      "change_pct": 1.82,
+      "tokens": 40920,
+      "seconds": 537
+    },
+    {
+      "config": "MXFP4 E2M1",
+      "weights": "mxfp4",
+      "activations": "mxfp4",
+      "perplexity": 15.475,
+      "change_pct": 50.86,
+      "tokens": 40920,
+      "seconds": 830
+    },
+    {
+      "config": "MXFP4 weights + MXFP8 acts",
+      "weights": "mxfp4",
+      "activations": "mxfp8",
+      "perplexity": 11.726,
+      "change_pct": 14.31,
+      "tokens": 40920,
+      "seconds": 507
+    }
+  ]
+}

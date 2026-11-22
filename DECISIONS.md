@@ -93,3 +93,12 @@ software stack was the largest gap in the earlier plan.
 Every pitch document states plainly that simulation proves the architecture
 works, not that the chip is ready to manufacture, and names what is needed
 to get there (engineers, licensed blocks, a design house, funding).
+
+### D-015 - INT8/FP8 are the main inference formats; add a mixed FP4 x FP8 mode
+The accuracy check (docs/RESULTS.md, 2026-11-22) showed MXINT8 and MXFP8
+lose under 4% on three public models, while plain MXFP4 for both weights and
+activations loses 51-140%. FP4 weights with FP8 activations loses 14-45%.
+So: INT8 and FP8 are the default inference formats; FP4 is offered for
+weights, paired with FP8 activations. The engine will gain a mode where the
+two inputs of a job use different formats. FP4 accuracy techniques (smaller
+blocks, rotations) will be evaluated in software before adding hardware.

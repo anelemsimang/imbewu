@@ -119,3 +119,52 @@ far larger. Planned improvements:
 **Not supported yet:** the FP8 "not a number" code (S.1111.111) and the
 E8M0 NaN scale (0xFF); FP8 E5M2 (used for training gradients); combining
 several MX blocks into one FP32 total. All are on the roadmap.
+
+## 2026-11-22 - Accuracy check: three public language models in MX formats
+
+**Question.** When a real language model's maths is done in the formats the
+Imbewu engine supports, how much accuracy is lost?
+
+**Method.** `tools/accuracy_eval.py`. Every matrix multiply inside the
+transformer layers had both its weights and its incoming activations rounded
+to the MX format (blocks of 32, shared power-of-two scale), with products
+summed in high precision, as the engine does. Accuracy measured as
+perplexity on the WikiText-2 test set (lower is better), windows of 1,024
+tokens. The rounding code was first checked against the ml_dtypes library on
+200,000 numbers plus exact ties: 0 mismatches.
+
+**Results (perplexity, and change vs full precision FP32):**
+
+| Format | Qwen2.5-0.5B | SmolLM2-360M | Qwen2.5-1.5B |
+|---|---|---|---|
+| FP32 (reference) | 13.79 | 12.42 | 10.26 |
+| MXINT8 | 13.87 (+0.6%) | 12.48 (+0.5%) | 10.29 (+0.3%) |
+| MXFP8 E4M3 | 14.29 (+3.6%) | 12.90 (+3.8%) | 10.45 (+1.8%) |
+| MXFP4 E2M1 | 33.09 (+140%) | 29.53 (+138%) | 15.48 (+51%) |
+| MXFP4 weights + MXFP8 activations | 17.73 (+29%) | 18.06 (+45%) | 11.73 (+14%) |
+| Tokens scored | 81,840 | 81,840 | 40,920 |
+
+**Same data on the chip itself** (`tools/real_model_on_chip.py`): real
+Qwen2.5-0.5B activations and weights through the simulated 16x16 engine; the
+chip's answer equals the software maths exactly in every format. Error of
+one matrix multiply vs FP32: layer 0 INT8 0.94%, FP8 3.85%, FP4 18.8%;
+layer 12 INT8 0.81%, FP8 3.66%, FP4 11.3%.
+
+**What this means, plainly.**
+1. MXINT8 and MXFP8 are safe for inference: under 4% loss, and less on the
+   bigger model. These are Imbewu's main inference formats.
+2. Plain MXFP4 for everything is not acceptable on these small models.
+3. FP4 hurts less as models get bigger (140% loss at 0.5B, 51% at 1.5B),
+   which matches published work: data-centre models are far bigger still.
+4. Keeping activations in FP8 and only weights in FP4 recovers most of the
+   loss. **The current engine cannot do this**: both inputs of a job must use
+   the same format. A mixed FP4 x FP8 mode is now a hardware requirement
+   (decision D-015).
+
+**Limits of this test (stated honestly).** Small models only (up to 1.5B
+parameters). The token embedding, final output layer, normalisation and the
+two attention products stayed in full precision. Plain rounding only, no
+FP4 accuracy techniques (smaller blocks, rotations, or training the model to
+expect FP4), which industry uses and which would narrow the FP4 gap. The
+1.5B model was scored on half as many tokens to save time. Raw numbers:
+`results/accuracy_*.json`.

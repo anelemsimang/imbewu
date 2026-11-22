@@ -31,7 +31,10 @@ design effort (see DECISIONS.md, D-013).
 - [x] Real model numbers on the chip: Qwen2.5-0.5B activations and weights run
       through the 16x16 engine in simulation; output matches software exactly
       (`tools/real_model_on_chip.py`, `results/`)
-- [ ] Accuracy check: run each format on real AI model data and measure the loss
+- [x] Accuracy check: INT8 / FP8 / FP4 on three public language models
+      (INT8 under 1% loss, FP8 under 4%, FP4 alone too lossy on small models;
+      see docs/RESULTS.md)
+- [ ] Mixed-format mode: FP4 weights x FP8 activations in one job (D-015)
 - [ ] First energy-per-operation estimate for each format
 - [ ] Waveform walkthrough for Anele
 
@@ -114,6 +117,6 @@ deliberately planted bugs, real model data.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. In progress: accuracy check of INT8 / FP8 / FP4 on three public
-language models. Next: write up results, then start W1 (formal verification)
-and W4 (early performance model) alongside tiling.
+Phase 1. Accuracy check done (docs/RESULTS.md, 2026-11-22). Next: W1
+(formal verification of the multi-format engine) and W4 (early performance
+model), then the mixed FP4 x FP8 mode and the tiling controller.
