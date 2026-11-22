@@ -66,12 +66,15 @@ def main():
     out = sys.argv[3] if len(sys.argv) > 3 else None
     x, w, sample = capture(model_id, layer)
     os.makedirs(BUILD, exist_ok=True)
-    sim = os.path.join(BUILD, "tb_v4_16")
-    subprocess.run(["iverilog", "-g2012", f"-DGRID_N={N}", "-o", sim] +
-                   [os.path.join(ROOT, f) for f in ("rtl/mx_mul.v", "rtl/fp32_add_fx.v", "rtl/pe_v4.v",
-                                                    "rtl/systolic_v4.v", "tests/tb_systolic_v4.v")],
+    # IMBEWU_ENGINE=v5 runs the version 5 engine (shared adders, 16 cells each)
+    ver = os.environ.get("IMBEWU_ENGINE", "v4")
+    sim = os.path.join(BUILD, f"tb_{ver}_16")
+    flags = ["-DV5", "-DGROUP=16"] if ver == "v5" else []
+    subprocess.run(["iverilog", "-g2012", f"-DGRID_N={N}", "-o", sim] + flags +
+                   [os.path.join(ROOT, f) for f in ("rtl/mx_mul.v", "rtl/fp32_add_fx.v", f"rtl/pe_{ver}.v",
+                                                    f"rtl/systolic_{ver}.v", "tests/tb_systolic_v4.v")],
                    check=True)
-    res = dict(model=model_id, layer=layer, matrix="mlp.gate_proj",
+    res = dict(model=model_id, layer=layer, engine=ver, matrix="mlp.gate_proj",
                tile=f"{N}x{x.shape[1]} x {x.shape[1]}x{N}, one job", results=[])
     for a_fmt, b_fmt in (("mxint8", "mxint8"), ("mxfp8", "mxfp8"), ("mxfp4", "mxfp4"), ("mxfp8", "mxfp4")):
         r = run(x, w, a_fmt, b_fmt, sim)

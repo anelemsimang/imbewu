@@ -19,24 +19,24 @@
 // larger one; bits of the smaller one that fall below the window are kept
 // as a single "sticky" bit, which is enough for correct rounding because
 // they lie far below the rounding point.
-module fp32_add_fx (
+// ---- Half 1: unpack, line up and add (exact, plus a sticky bit) --------
+module fp32_align_add (
     input  wire [31:0]        acc,
     input  wire signed [47:0] x,
     input  wire signed [10:0] e,
-    output reg  [31:0]        sum
+    output reg                inf,      // acc is infinite: it stays as it is
+    output reg                s_r,      // sign of the sum
+    output reg  [82:0]        R,        // magnitude of the sum: value = R * 2^B
+    output reg  signed [12:0] B
 );
     localparam signed [12:0] LOW = -13'sd2048;
 
-    reg               s_a, s_x, s_r;
+    reg               s_a, s_x;
     reg        [23:0] m_a;
     reg        [47:0] m_x;
-    reg signed [12:0] e_a, e_x, t_a, t_x, t_hi, base, B, lsb, s;
-    reg        [82:0] al_a, al_x, R, n_wide;
+    reg signed [12:0] e_a, e_x, t_a, t_x, t_hi, base;
+    reg        [82:0] al_a, al_x;
     reg signed [84:0] S;
-    reg        [24:0] n;
-    reg               g, st;
-    integer           L, k;
-    reg signed [12:0] biased;
 
     // Line up magnitude m (with exponent ee) so that window bit k means
     // 2^(base - 1 + k); bit 0 is the sticky bit.
@@ -62,6 +62,7 @@ module fp32_add_fx (
     endfunction
 
     always @(*) begin
+        inf = (acc[30:23] == 8'hFF);
         // unpack the FP32 total
         s_a = acc[31];
         m_a = (acc[30:23] == 8'd0) ? {1'b0, acc[22:0]} : {1'b1, acc[22:0]};
@@ -83,6 +84,25 @@ module fp32_add_fx (
         s_r  = S[84];
         R    = s_r ? -S[82:0] : S[82:0];
 
+    end
+endmodule
+
+// ---- Half 2: find the leading one, round to nearest even, pack ---------
+module fp32_round_pack (
+    input  wire               inf,
+    input  wire [31:0]        acc,
+    input  wire               s_r,
+    input  wire [82:0]        R,
+    input  wire signed [12:0] B,
+    output reg  [31:0]        sum
+);
+    reg signed [12:0] lsb, s, biased;
+    reg        [82:0] n_wide;
+    reg        [24:0] n;
+    reg               g, st;
+    integer           L, k;
+
+    always @(*) begin
         // leading one
         L = -1;
         for (k = 0; k < 83; k = k + 1) if (R[k]) L = k;
@@ -104,10 +124,24 @@ module fp32_add_fx (
         if (n[24]) begin n = n >> 1; lsb = lsb + 13'sd1; end
         biased = lsb + 13'sd150;
 
-        if (acc[30:23] == 8'hFF)          sum = acc;                       // stays infinite
+        if (inf)                          sum = acc;                       // stays infinite
         else if (L < 0)                   sum = 32'd0;                     // exact zero: +0
         else if (!n[23])                  sum = {s_r, 8'd0, n[22:0]};      // subnormal (or 0)
         else if (biased >= 13'sd255)      sum = {s_r, 8'hFF, 23'd0};       // overflow
         else                              sum = {s_r, biased[7:0], n[22:0]};
     end
+endmodule
+
+// ---- The whole adder in one tick: the two halves joined ----------------
+module fp32_add_fx (
+    input  wire [31:0]        acc,
+    input  wire signed [47:0] x,
+    input  wire signed [10:0] e,
+    output wire [31:0]        sum
+);
+    wire               inf, s_r;
+    wire        [82:0] R;
+    wire signed [12:0] B;
+    fp32_align_add  u_a (.acc(acc), .x(x), .e(e), .inf(inf), .s_r(s_r), .R(R), .B(B));
+    fp32_round_pack u_r (.inf(inf), .acc(acc), .s_r(s_r), .R(R), .B(B), .sum(sum));
 endmodule

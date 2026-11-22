@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -83,11 +83,28 @@ test-v4:
 	  done; \
 	done
 
+# Version 5 engine (shared, two-tick FP32 adders): same answers as version 4.
+# Blocks must have at least min(G, N) beats, so vectors are made with 16.
+test-v5:
+	@mkdir -p $(BUILD)/v5
+	@for n in $(SIZES); do \
+	  jobs=60; [ $$n -ge 16 ] && jobs=15; \
+	  python3 tools/gen_v4_vectors.py $$n $(BUILD)/v5 $$jobs 16 || exit 1; \
+	  iverilog -g2012 -DGRID_N=$$n -DV5 -DGROUP=16 -o $(BUILD)/v5/tb_v5_$$n \
+	    rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v tests/tb_systolic_v4.v || exit 1; \
+	  for s in $(V4_SCENARIOS); do \
+	    vvp -n $(BUILD)/v5/tb_v5_$$n +PRE=$(BUILD)/v5/v4_N$${n}_$$s > $(BUILD)/v5/log_$${n}_$$s.txt; \
+	    grep -E "errors|ticks" $(BUILD)/v5/log_$${n}_$$s.txt; \
+	    grep -q '^PASS' $(BUILD)/v5/log_$${n}_$$s.txt || exit 1; \
+	  done; \
+	done
+
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)
 FORMAL_SIZES := 2 4 8
 formal:
 	@for n in $(FORMAL_SIZES); do formal/run.sh $$n v3 || exit 1; formal/run.sh $$n v4 || exit 1; done
+	@formal/run.sh 4 v5 2 && formal/run.sh 4 v5 4 && formal/run.sh 8 v5 4 && formal/run.sh 8 v5 8
 
 # Plant bugs on purpose and check the tests catch every one
 mutants:

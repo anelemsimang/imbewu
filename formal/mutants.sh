@@ -8,6 +8,15 @@ OUT=build/mutants; mkdir -p $OUT
 [ -f build/mul_exh.hex ]  || python3 tools/gen_mul_exhaustive.py build/mul_exh.hex
 [ -f build/fp32_stim.hex ] || python3 tools/fp32_ref.py build/fp32 200000
 mkdir -p build/v4; [ -f build/v4/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v4
+mkdir -p build/v5; [ -f build/v5/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v5 60 4
+V5="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v"
+v5sim() {   # 4x4 version 5 tests (adders shared by 4 cells) with one file replaced
+    local files=$(echo $V5 | sed "s#$1#$2#")
+    iverilog -g2012 -DGRID_N=4 -DV5 -DGROUP=4 -o $OUT/tb5 $files tests/tb_systolic_v4.v || return 1
+    for sc in same mixed stress; do
+        vvp -n $OUT/tb5 +PRE=build/v5/v4_N4_$sc | grep -q '^PASS' || return 1
+    done
+}
 V4="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v4.v rtl/systolic_v4.v"
 v4sim() {   # run the 4x4 version 4 tests with one file replaced
     local files=$(echo $V4 | sed "s#$1#$2#")
@@ -35,6 +44,10 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
           vvp -n $OUT/tb +PRE=build/fp32 +COUNT=200000 | grep -q '^PASS' && r=missed || r=caught
     elif [ $kind = v4 ]; then
         v4sim $src $m && r=missed || r=caught
+    elif [ $kind = v5 ]; then
+        v5sim $src $m && r=missed || r=caught
+    elif [ $kind = formal5 ]; then
+        SYS=$m formal/run.sh 4 v5 4 > /dev/null 2>&1 && r=missed || r=caught
     else
         SYS=$m formal/run.sh 4 > /dev/null 2>&1 && r=missed || r=caught
     fi
@@ -62,5 +75,12 @@ mutate $F "FP32 smallest step (subnormals) wrong"     's/if (lsb < -13'"'"'sd149
 mutate $Q "MX INT8 factor missing on the B side"      '50s/11'"'"'sd6 : 11'"'"'sd0/11'"'"'sd0 : 11'"'"'sd0/' v4
 mutate $Q "block total not cleared at block end"      '72s/partial <= 48'"'"'sd0;/partial <= x;/' v4
 mutate $Q "FP32 total not cleared between jobs"       '75s/acc <= 32'"'"'d0;/acc <= acc;/' v4
+echo "version 5 engine:"
+P5=rtl/pe_v5.v; S5=rtl/systolic_v5.v
+mutate $S5 "shared adder answers the wrong cell"            's/(p_who == j - J0)/(p_who == J1 - 1 - j)/' v5
+mutate $P5 "block total not cleared at block end"            's/if (v_r) partial <= be_r ? 48'"'"'sd0 : x;/if (v_r) partial <= x;/' v5
+mutate $P5 "FP32 total not cleared between jobs"             's/                    acc <= 32'"'"'d0;/                    acc <= wb_sum;/' v5
+mutate $S5 "rows read out one tick too early"                's/localparam LAT = 2;/localparam LAT = 1;/' formal5
+mutate $S5 "adder requests not picked from the whole group"  's/for (c = J0; c < J1; c = c + 1)/for (c = J0; c < J1 - 1; c = c + 1)/' v5
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

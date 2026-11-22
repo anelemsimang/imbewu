@@ -28,7 +28,9 @@ design effort (see DECISIONS.md, D-013).
 - [x] Version 4 engine (`rtl/systolic_v4.v`): many MX blocks per job summed
       inside each cell into FP32 (rounded once per block), any pairing of
       formats per side; 0 errors, formal proof, real model data bit exact
-- [ ] Make version 4 small and fast: shared, pipelined FP32 adders (D-017)
+- [x] Version 5 (`rtl/systolic_v5.v`): shared, two-tick FP32 adders (D-017);
+      same answers as version 4, 4x4 grid 54% smaller, proven never to
+      double-book an adder (D-018)
 - [ ] Precision v2 rest: 4x FP4 packing, FP8 E5M2, NaN handling
 - [ ] BF16 for training
 - [x] Real model numbers on the chip: Qwen2.5-0.5B activations and weights run
@@ -128,6 +130,7 @@ deliberately planted bugs, real model data.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Version 4 engine done: block totals summed inside the cell into
-FP32, mixed formats (D-015, D-016). Next: make it small and fast (shared,
-pipelined FP32 adders, D-017), then the tiling controller.
+Phase 1. Version 5 engine done and is the reference design (D-018): FP32
+block totals inside the cells, mixed formats, shared two-tick adders.
+Next: the tiling controller (break big matrices into jobs), then a first
+physical-size and clock-speed estimate (W2).

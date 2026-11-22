@@ -1,6 +1,7 @@
 // tb_systolic_v4.v - drives the version 4 engine with vectors from
 // tools/gen_v4_vectors.py and checks every FP32 result bit for bit.
-// Settings: -DGRID_N=8   plusargs: +PRE=<prefix>  optional +DUMP=<file>
+// Settings: -DGRID_N=8, and -DV5 [-DGROUP=16] to test version 5 instead
+// Plusargs: +PRE=<prefix>  optional +DUMP=<file>
 `timescale 1ns/1ps
 `ifndef GRID_N
 `define GRID_N 4
@@ -18,11 +19,25 @@ module tb_systolic_v4;
     wire [IW-1:0] out_row_idx;
     wire [N*32-1:0] out_row;
 
-    systolic_v4 #(.N(N)) dut (.clk(clk), .rst(rst), .in_valid(in_valid),
+`ifdef V5
+    // version 5: same interface and answers, shared adders (-DV5 -DGROUP=16)
+`ifndef GROUP
+`define GROUP 16
+`endif
+    systolic_v5 #(.N(N), .G(`GROUP)) dut (
+`else
+    systolic_v4 #(.N(N)) dut (
+`endif
+        .clk(clk), .rst(rst), .in_valid(in_valid),
         .in_blk_last(in_bl), .in_job_last(in_jl), .in_fa(in_fa), .in_fb(in_fb),
         .a_col(a_col), .b_row(b_row), .in_a_scale(a_sc), .in_b_scale(b_sc),
         .out_valid(out_valid), .out_row_idx(out_row_idx), .out_row(out_row));
     always #5 clk = ~clk;
+`ifdef V5
+    localparam VER = "V5";
+`else
+    localparam VER = "V4";
+`endif
 
     reg [SW-1:0] stim [0:MAXB-1];
     reg [EW-1:0] expv [0:MAXR-1];
@@ -71,10 +86,10 @@ module tb_systolic_v4;
             errors = errors + 1;
             $display("MISSING rows: saw %0d expected %0d", r_seen, nr);
         end
-        $display("V4 %0dx%0d %0s: %0d rows, %0d FP32 results checked, %0d errors",
-                 N, N, pre, r_seen, r_seen * N, errors);
-        $display("V4 %0dx%0d %0s: %0d multiplies on %0d cells in %0d ticks",
-                 N, N, pre, macs, N*N, last_out - first_in + 1);
+        $display("%0s %0dx%0d %0s: %0d rows, %0d FP32 results checked, %0d errors",
+                 VER, N, N, pre, r_seen, r_seen * N, errors);
+        $display("%0s %0dx%0d %0s: %0d multiplies on %0d cells in %0d ticks",
+                 VER, N, N, pre, macs, N*N, last_out - first_in + 1);
         if (dump_fd) $fclose(dump_fd);
         if (errors == 0) $display("PASS"); else $display("FAIL");
         $finish;

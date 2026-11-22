@@ -310,3 +310,47 @@ planned (D-017): cells in a row reach the end of a block one tick apart,
 so one FP32 adder can serve many cells in turn, and the adder can be split
 over several ticks (pipelined). Estimated cell size with one shared adder
 per 16 cells: about 3,000, close to v3.
+
+## 2026-11-22 - Version 5 engine: shared, two-tick FP32 adders (D-017)
+
+**What changed.** Same maths and answers as version 4, built smaller and
+split into shorter steps. Files: `rtl/pe_v5.v`, `rtl/systolic_v5.v`; the
+FP32 adder (`rtl/fp32_add_fx.v`) is now two halves that can run in
+separate ticks.
+1. **The cell has no FP32 adder of its own.** Cells in a row reach the end
+   of a block one tick apart, so a group of up to G cells (G = 16) take
+   turns on one shared adder.
+2. **Shorter steps.** The multiply has its own tick; the shared adder takes
+   two ticks (line up and add, then round). Output rows leave 2 ticks later
+   than in version 4.
+3. **New rule:** every MX block must have at least min(G, N) beats. A
+   standard block of 32 numbers is 32 beats, or 16 when both sides are FP4,
+   so standard blocks always qualify.
+
+**Checks:**
+
+| Check | Result |
+|---|---|
+| Whole engine vs the version 4 reference, 4x4 / 8x8 / 16x16, adders shared by 4 and by 16, same / mixed / stress | 0 errors (every answer bit-identical) |
+| Real model data (Qwen2.5-0.5B, 28 blocks per job, 4 format pairings) | bit exact, same errors as version 4 |
+| Formal proof R1-R2 (rows complete, in order, on time) and **R4: a shared adder is never double-booked** | proven for all time: 4x4 with groups of 2 and 4, 8x8 with groups of 4 and 8 |
+| Is the block rule really needed? Proof re-run with blocks one beat shorter | solver finds a double-booking at once: the rule is exactly right |
+| Planted bugs (5 new for version 5) | 23 of 23 caught in total |
+| Timing | 2 ticks more than version 4, as designed (measured) |
+
+**Size (Yosys generic cells):**
+
+| | Per cell | 4x4 grid |
+|---|---|---|
+| Version 3 (one block per job, partial sums added outside, not counted) | 2,646 | 46,517 |
+| Version 4 (own FP32 adder per cell) | 11,260 | 179,962 |
+| **Version 5, adder shared by 4 cells** | 5,179 average | **82,860** |
+| Version 5, adder shared by 16 cells (estimate from parts) | about 3,600 | - |
+
+Parts: cell without adder 2,900; shared adder 5,420 + 2,927 (two halves).
+At the planned 32x32 engine with groups of 16, version 5 is about 1.4x the
+size of version 3 while doing everything version 3 could not: whole-row
+jobs, FP32 results, mixed formats, full FP4 speed.
+
+**Still open:** clock speed is not measured yet (needs the physical flow,
+W2); the 48-bit block total and the adder halves are the longest paths.

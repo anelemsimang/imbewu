@@ -1,0 +1,41 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "layer": 0,
+  "engine": "v5",
+  "matrix": "mlp.gate_proj",
+  "tile": "16x896 x 896x16, one job",
+  "results": [
+    {
+      "activations": "mxint8",
+      "weights": "mxint8",
+      "blocks": 28,
+      "beats": 896,
+      "bit_exact_vs_reference": true,
+      "relative_error_vs_fp32_pct": 0.936
+    },
+    {
+      "activations": "mxfp8",
+      "weights": "mxfp8",
+      "blocks": 28,
+      "beats": 896,
+      "bit_exact_vs_reference": true,
+      "relative_error_vs_fp32_pct": 3.854
+    },
+    {
+      "activations": "mxfp4",
+      "weights": "mxfp4",
+      "blocks": 28,
+      "beats": 448,
+      "bit_exact_vs_reference": true,
+      "relative_error_vs_fp32_pct": 18.842
+    },
+    {
+      "activations": "mxfp8",
+      "weights": "mxfp4",
+      "blocks": 28,
+      "beats": 896,
+      "bit_exact_vs_reference": true,
+      "relative_error_vs_fp32_pct": 14.219
+    }
+  ]
+}

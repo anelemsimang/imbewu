@@ -5,7 +5,7 @@ Expected answers are computed independently of the design: element values
 from ml_dtypes (via gen_mx_vectors.value_x512), exact block totals with
 Python integers, and FP32 rounding with exact fractions (fp32_ref.py).
 
-Usage: python3 tools/gen_v4_vectors.py N OUT_DIR [JOBS]
+Usage: python3 tools/gen_v4_vectors.py N OUT_DIR [JOBS] [MIN_BLOCK_BEATS]
 Scenarios: same (same format both sides), mixed (different formats),
            stress (extreme scales, cancellation, odd block lengths, gaps)
 """
@@ -53,13 +53,16 @@ def negate(fmt, code):
     return code ^ 0x80
 
 
+MIN_BLK = 1
+
+
 def make_job(N, fa, fb, style):
     pair = fa == FP4 and fb == FP4
     blocks = []
     nblk = random.randrange(1, 6)
     for b in range(nblk):
         if style == "odd":
-            K = random.randrange(1, 41)
+            K = random.randrange(MIN_BLK * (2 if pair else 1), 41)
         else:
             K = 32
         A = [[rand_code(fa, style) for _ in range(K)] for _ in range(N)]
@@ -160,6 +163,8 @@ def main():
     N = int(sys.argv[1])
     out = sys.argv[2]
     jobs_per = int(sys.argv[3]) if len(sys.argv) > 3 else 60
+    global MIN_BLK
+    MIN_BLK = int(sys.argv[4]) if len(sys.argv) > 4 else 1   # shortest block, in beats (version 5 rule)
     os.makedirs(out, exist_ok=True)
     random.seed(4000 + N)
     for scen in ("same", "mixed", "stress"):

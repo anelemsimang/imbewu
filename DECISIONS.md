@@ -118,3 +118,11 @@ multiply-and-add happens in one tick. Since cells in a row finish a block
 one tick apart, one adder can serve many cells in turn (one per 16 cells
 for FP4, per 32 for FP8), and it can be split over several ticks. This is
 the next hardware step, judged by the same tests and proofs.
+
+### D-018 - Version 5 is the reference engine; blocks of at least 16 beats
+Version 5 (shared two-tick FP32 adders, groups of 16 cells) gives the same
+bit-exact answers as version 4 at less than half the size, and is formally
+proven never to double-book an adder provided every MX block has at least
+min(16, N) beats. Standard MX blocks always meet this; software pads a
+short final block with zeros. Versions 3 and 4 stay in the repository as
+the record of how the design got here.
