@@ -82,9 +82,11 @@ deliberately planted bugs, real model data.
 - [ ] Later, with funding: FPGA prototype running real models at real speed
 
 ### W2 - Real physical numbers (limitation 4: no secret factory rules)
-- [ ] Run the Imbewu tile through the open-source layout flow (OpenLane /
-      OpenROAD) on open factory rules (GF180 or SkyWater 130 nm): real area,
-      clock speed and power, replacing generic logic-cell counts
+- [x] First step: engine mapped onto real cell libraries (SKY130, open 45 nm)
+      with free tools: area and logic-only clock speed; slow paths found and
+      fixed (`tools/w2_estimate.sh`, D-019)
+- [ ] Full layout flow (OpenLane / OpenROAD) on SKY130 or GF180: placement,
+      wiring, real clock speed and power
 - [ ] Scale those numbers to modern processes using published industry data,
       clearly labelled as estimates
 - [ ] List of blocks that must be licensed (HBM interface, high-speed links,
@@ -133,6 +135,6 @@ deliberately planted bugs, real model data.
 ## Current position
 Phase 1. Version 5 engine done and is the reference design (D-018): FP32
 block totals inside the cells, mixed formats, shared two-tick adders.
-Tiling controller done. Next: a first physical-size and clock-speed
-estimate with the open layout flow (W2), then Phase 2 (tile memory and
-data mover).
+First physical estimate done (W2, D-019): about 600 MHz logic-only and
+3,580 um^2 per cell at 45 nm. Next: Phase 2 (tile memory and data mover), with
+placement and routing (OpenROAD) and a power estimate when tools allow.

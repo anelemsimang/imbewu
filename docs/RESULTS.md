@@ -386,3 +386,78 @@ towards 100% as matrices grow (64% only for a tiny 2-tile run on 16x16).
 **What it does not do yet:** fetch data from HBM while computing (the data
 mover, Phase 2), handle sizes that are not multiples of N in hardware, or
 run several engines in parallel.
+
+## 2026-11-22 - First physical estimate (W2): area and clock speed on real cell libraries
+
+**Method.** `tools/w2_estimate.sh`: the design is turned into the real
+logic gates of two open cell libraries with Yosys and ABC (free tools),
+using fast parallel (Kogge-Stone) adders as real flows do
+(`tools/w2_kogge_stone.v`), and the longest logic path between registers is
+measured from the library's gate delays.
+- **SKY130**: an open 130 nm manufacturing process; real chips are made in it.
+- **45 nm**: the open Nangate teaching library, for a more modern reference point.
+Libraries come from the open OpenROAD flow scripts; they are downloaded
+to `build/pdk/` and not stored in the repository.
+
+**What timing told us, and what changed.** The first measurement showed the
+shared FP32 adder was far slower than the cells (19.6 ns on SKY130), for
+three reasons: a ripple adder in synthesis, three small parts written as
+long chains (leading-one search, sticky bits, lost bits), and too much
+work in each adder step. Fixes, all with bit-identical results (200,000
+adder cases, every engine and tiling test, every proof re-run):
+1. parallel adders; leading-one found with fixed OR trees; masks for the
+   sticky and lost bits;
+2. the exponent maths rewritten around a single subtraction;
+3. the shared adder split into a hand-off register and five one-tick steps
+   (S1a, S1b, S2, S3, S4). Shared adders have many ticks between uses, so
+   the extra steps cost no throughput; they add 4 ticks of delay to each
+   job's results (rows now leave N+7+r ticks after the last beat) and the
+   block rule becomes "at least max(min(G, N), 6) beats", re-proven
+   formally and shown to be exact (one beat less breaks it).
+
+**Longest logic path of each part (ps):**
+
+| Part | SKY130 | 45 nm |
+|---|---|---|
+| Cell (multiply tick, block-total tick) | 7,491 | 1,654 |
+| Adder S1a (unpack, choose window) | 6,965 | 1,661 |
+| Adder S1b (line up) | 3,590 | 851 |
+| Adder S2 (add / subtract) | 4,966 | 936 |
+| Adder S3 (leading one, shift amount) | 7,724 | 1,587 |
+| Adder S4 (round, pack) | 5,870 | 1,434 |
+| *Version 3 cell, for comparison* | *11,545* | *2,175* |
+| **Slowest step = clock limit** | **7.7 ns: about 130 MHz** | **1.66 ns: about 600 MHz** |
+| Whole 4x4 engine, adders shared by 4 (check) | 8,306: about 120 MHz | (running) |
+
+These are logic-only figures. Wires (after placement and routing) and the
+registers' own timing will lower the real clock, so treat them as upper
+bounds. That is the next W2 step.
+
+**Area (um^2):**
+
+| | SKY130 | 45 nm |
+|---|---|---|
+| Cell (no adder) | 14,246 | 2,879 |
+| One shared adder: logic + about 630 pipeline registers | about 54,200 | about 11,200 |
+| **Cell including its 1/16 share of an adder** | **about 17,600** | **about 3,580** |
+| 32x32 engine (1,024 cells) | about 18 mm^2 | about 3.7 mm^2 |
+| Check: whole 4x4 engine (16 cells, 4 adders), measured | 432,174 (parts estimate: 444,700, within 3%) | (running) |
+
+**What this means for the pitch.**
+1. The engine works in real gates of a real process; nothing in it needs
+   unusual technology.
+2. At 45 nm, one 32x32 engine at 600 MHz would give about 1.2 TFLOPS of FP8
+   (2.5 in FP4) in about 3.7 mm^2.
+3. The concept chip's 256 engines would need about 940 mm^2 at 45 nm for
+   the engines alone, more than the largest chip a factory can print (about
+   850 mm^2), before adding memory, HBM interfaces and links. A data-centre
+   chip therefore needs a modern 3-5 nm process, as every competitor uses.
+   Those processes are licensed from the foundry under NDA, so the next
+   numbers must come with a foundry or design-house partner (W5). The
+   concept chip's assumed 1.5 GHz is not yet supported by any measurement.
+
+The whole 4x4 engine's longest path (8.3 ns on SKY130) is a little longer
+than any single part: it includes the hand-off from the cells to the shared
+adder. Area measured on the whole engine matches the sum of the parts.
+
+**Not done yet:** placement and routing (OpenROAD), power, SRAM area.

@@ -126,3 +126,11 @@ proven never to double-book an adder provided every MX block has at least
 min(16, N) beats. Standard MX blocks always meet this; software pads a
 short final block with zeros. Versions 3 and 4 stay in the repository as
 the record of how the design got here.
+
+### D-019 - Physical estimates first on open libraries, then with a partner
+Area and clock speed are measured on open cell libraries (SKY130 and an
+open 45 nm library) with free tools. They show the design is buildable and
+where its slow paths are, but a data-centre chip needs a 3-5 nm process
+whose libraries are licensed under NDA. Real numbers for the pitch's target
+chip will come from a foundry or design-house partner (W5); until then all
+advanced-node figures are labelled as assumptions.
