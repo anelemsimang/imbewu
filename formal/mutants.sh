@@ -106,6 +106,7 @@ echo "tile version 2 (weights kept):"
 T2=rtl/tile_v2.v
 mutate $T2 "weights overwritten while an earlier command still needs them" 's/|| (ncomp > lu\[nslot\]);/|| 1'"'"'b1;/' tilev2
 mutate $T2 "engine reads the other weight slot"                 's/comp_slot <= f_slot(cmds\[ncomp\[3:0\]\]);/comp_slot <= ~f_slot(cmds[ncomp[3:0]]);/' tilev2
-mutate $T2 "weights written into the activation half"           's/ld_we_b <= 1'"'"'b1; ld_baddr <= {dslot,/ld_we_b <= 1'"'"'b1; ld_baddr <= {dhalf,/' tilev2
+mutate $T2 "weights written into the activation half"           's/ld_we_b <= 1'"'"'b1; ld_baddr <= {q_slot\[qr\],/ld_we_b <= 1'"'"'b1; ld_baddr <= {q_half[qr],/' tilev2
+mutate $T2 "answers filed under the wrong command"              's/rcv <= 0; qr <= qr + 1; nld <= nld + 1;/rcv <= 0; nld <= nld + 1;/' tilev2
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

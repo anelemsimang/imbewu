@@ -551,3 +551,22 @@ work 1.9x to 2.2x faster.
 before its first word (about 40 ticks here, paid twice per command); the
 first command of each group must fetch all its weights before computing.
 Next: overlap transfers, then the RISC-V control core.
+
+**Update: overlapped transfers.** The data mover now has a request side
+and an answer side: it sends one command's read requests and moves on at
+once, while a small queue tells the answer side which command, half and
+weight slot the arriving words belong to. So one transfer's memory delay
+overlaps the next. Same 9 runs, all still bit exact; one more planted bug
+(answers filed under the wrong command) added and caught (4 of 4).
+
+| Run (4x4 unless stated) | Before | After |
+|---|---|---|
+| Decode, weights kept, full bandwidth | 75% busy, 5,736 ticks | 77%, 5,572 ticks |
+| Decode, weights kept, half bandwidth | 57%, 7,567 ticks | 60%, 7,101 ticks |
+| Mixed shapes, weights kept | 68% | 72% |
+| Mixed shapes, 8x8 engine | 58% | 64% |
+
+What still costs time: new weights can only be fetched one command
+ahead (they share the scheduler's look-ahead with the activations), so
+the first command of each group waits for its weights. Next step:
+prefetch weights further ahead, independently of activations.

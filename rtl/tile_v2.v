@@ -134,11 +134,21 @@ module tile_v2 #(
     reg [1:0]     part;
     reg [W32-1:0] cbuf;
 
-    wire [199:0] ncmd_ld = cmds[nld[3:0]];
+    // Loads are split in two: the request side sends a command's read
+    // requests and moves on at once; the answer side files the answers
+    // as they arrive, using a small queue that says which command (and
+    // which halves / slot) the next answers belong to. So the memory delay
+    // of one transfer overlaps the next.
+    reg [4:0]  nli;                          // loads whose requests are sent
+    reg [15:0] q_na [0:3], q_nab [0:3], q_nabs [0:3];
+    reg [16:0] q_tot [0:3];
+    reg        q_half [0:3], q_slot [0:3];
+    reg [1:0]  qw, qr;
+    wire [199:0] ncmd_ld = cmds[nli[3:0]];
     wire nslot = f_slot(ncmd_ld);
     // new weights may go into a slot only when every earlier user is computed
     wire b_ok = (f_nb(ncmd_ld) == 16'd0) || !lu_v[nslot] || (ncomp > lu[nslot]);
-    wire can_load  = (nld < n_cmds) && (nld < ncomp + 2) && b_ok;
+    wire can_load  = (nli < n_cmds) && (nli < ncomp + 2) && b_ok;
     reg  dslot;
     wire can_store = (nst < ncomp);
 
@@ -149,11 +159,13 @@ module tile_v2 #(
         if (rst) begin
             busy <= 1'b0; dstate <= D_IDLE; mem_req <= 1'b0; mem_we <= 1'b0;
             nld <= 0; ncomp <= 0; nst <= 0; computing <= 1'b0; comp_half <= 1'b0;
+            nli <= 0; qw <= 0; qr <= 0; rcv <= 0;
             comp_slot <= 1'b0; lu_v[0] <= 1'b0; lu_v[1] <= 1'b0;
             ticks_busy <= 0; ticks_engine <= 0;
         end else begin
             if (start && !busy) begin
                 busy <= 1'b1; nld <= 0; ncomp <= 0; nst <= 0; computing <= 1'b0;
+                nli <= 0; qw <= 0; qr <= 0; rcv <= 0;
                 lu_v[0] <= 1'b0; lu_v[1] <= 1'b0;
                 ticks_busy <= 0; ticks_engine <= 0;
             end
@@ -176,21 +188,41 @@ module tile_v2 #(
                 ncomp     <= ncomp + 1;
             end
 
-            // data mover
+            // answer side: put each answer into the right SRAM
+            if (mem_rvalid) begin
+                ld_wdata <= mem_rdata;
+                if (rcv < q_na[qr]) begin
+                    ld_we_a <= 1'b1; ld_waddr <= {q_half[qr], rcv[SAW-1:0]};
+                end else if (rcv < q_nab[qr]) begin
+                    ld_we_b <= 1'b1; ld_baddr <= {q_slot[qr], rcv[SAW-1:0] - q_na[qr][SAW-1:0]};
+                end else if (rcv < q_nabs[qr]) begin
+                    ld_we_sa <= 1'b1; ld_waddr <= {q_half[qr], rcv[SAW-1:0] - q_nab[qr][SAW-1:0]};
+                end else begin
+                    ld_we_sb <= 1'b1; ld_baddr <= {q_slot[qr], rcv[SAW-1:0] - q_nabs[qr][SAW-1:0]};
+                end
+                if (rcv + 1 == q_tot[qr]) begin
+                    rcv <= 0; qr <= qr + 1; nld <= nld + 1;
+                end else rcv <= rcv + 1;
+            end
+
+            // data mover (request side)
             case (dstate)
             D_IDLE: begin
                 mem_req <= 1'b0; mem_we <= 1'b0;
                 if (busy && can_load) begin
-                    dcmd  <= cmds[nld[3:0]];
-                    dhalf <= nld[0];
-                    dslot <= nslot;
-                    lu[nslot] <= nld; lu_v[nslot] <= 1'b1;
-                    na    <= f_na(cmds[nld[3:0]]);
-                    nab   <= f_na(cmds[nld[3:0]]) + f_nb(cmds[nld[3:0]]);
-                    nabs  <= f_na(cmds[nld[3:0]]) + f_nb(cmds[nld[3:0]]) + f_nsa(cmds[nld[3:0]]);
-                    total <= f_na(cmds[nld[3:0]]) + f_nb(cmds[nld[3:0]]) +
-                             f_nsa(cmds[nld[3:0]]) + f_nsb(cmds[nld[3:0]]);
-                    iss <= 0; rcv <= 0;
+                    dcmd  <= ncmd_ld;
+                    lu[nslot] <= nli; lu_v[nslot] <= 1'b1;
+                    total <= f_na(ncmd_ld) + f_nb(ncmd_ld) + f_nsa(ncmd_ld) + f_nsb(ncmd_ld);
+                    // tell the answer side what is coming
+                    q_na[qw]   <= f_na(ncmd_ld);
+                    q_nab[qw]  <= f_na(ncmd_ld) + f_nb(ncmd_ld);
+                    q_nabs[qw] <= f_na(ncmd_ld) + f_nb(ncmd_ld) + f_nsa(ncmd_ld);
+                    q_tot[qw]  <= f_na(ncmd_ld) + f_nb(ncmd_ld) + f_nsa(ncmd_ld) + f_nsb(ncmd_ld);
+                    q_half[qw] <= nli[0];
+                    q_slot[qw] <= nslot;
+                    qw  <= qw + 1;
+                    nli <= nli + 1;
+                    iss <= 0;
                     dstate <= D_LOAD;
                 end else if (busy && can_store) begin
                     dcmd  <= cmds[nst[3:0]];
@@ -202,29 +234,15 @@ module tile_v2 #(
                 end
             end
             D_LOAD: begin
-                // ask for the next word whenever main memory accepts one
+                // ask for the next word whenever main memory accepts one,
+                // then move on without waiting for the answers
                 if (mem_req && mem_ready) iss <= iss + 1;
                 mem_req  <= (iss + (mem_req && mem_ready) < total);
                 mem_we   <= 1'b0;
                 mem_addr <= f_in(dcmd) + iss + (mem_req && mem_ready);
-                // put each answer into the right SRAM, in the free half
-                if (mem_rvalid) begin
-                    ld_wdata <= mem_rdata;
-                    if (rcv < na) begin
-                        ld_we_a <= 1'b1; ld_waddr <= {dhalf, rcv[SAW-1:0]};
-                    end else if (rcv < nab) begin
-                        ld_we_b <= 1'b1; ld_baddr <= {dslot, rcv[SAW-1:0] - na[SAW-1:0]};
-                    end else if (rcv < nabs) begin
-                        ld_we_sa <= 1'b1; ld_waddr <= {dhalf, rcv[SAW-1:0] - nab[SAW-1:0]};
-                    end else begin
-                        ld_we_sb <= 1'b1; ld_baddr <= {dslot, rcv[SAW-1:0] - nabs[SAW-1:0]};
-                    end
-                    rcv <= rcv + 1;
-                    if (rcv + 1 == total) begin
-                        nld <= nld + 1;
-                        mem_req <= 1'b0;
-                        dstate <= D_IDLE;
-                    end
+                if (iss + (mem_req && mem_ready) == total) begin
+                    mem_req <= 1'b0;
+                    dstate  <= D_IDLE;
                 end
             end
             D_ST_RD: begin                       // ask SRAM for one C word
