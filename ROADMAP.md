@@ -25,16 +25,20 @@ design effort (see DECISIONS.md, D-013).
 - [x] Precision flexibility v1 (`rtl/systolic_mx.v`): INT8, FP8 E4M3 and FP4 E2M1
       with OCP MX block scales, format switchable per job, exact results,
       FP4 at 2x speed; 0 errors in 336,000 checked results (see docs/RESULTS.md)
-- [ ] Precision v2: shared exponent alignment per block (smaller cells),
-      4x FP4 packing, FP8 E5M2, NaN handling
-- [ ] BF16 for training, and FP32 totals across many MX blocks
+- [x] Version 4 engine (`rtl/systolic_v4.v`): many MX blocks per job summed
+      inside each cell into FP32 (rounded once per block), any pairing of
+      formats per side; 0 errors, formal proof, real model data bit exact
+- [ ] Make version 4 small and fast: shared, pipelined FP32 adders (D-017)
+- [ ] Precision v2 rest: 4x FP4 packing, FP8 E5M2, NaN handling
+- [ ] BF16 for training
 - [x] Real model numbers on the chip: Qwen2.5-0.5B activations and weights run
       through the 16x16 engine in simulation; output matches software exactly
       (`tools/real_model_on_chip.py`, `results/`)
 - [x] Accuracy check: INT8 / FP8 / FP4 on three public language models
       (INT8 under 1% loss, FP8 under 4%, FP4 alone too lossy on small models;
       see docs/RESULTS.md)
-- [ ] Mixed-format mode: FP4 weights x FP8 activations in one job (D-015)
+- [x] Mixed-format mode: FP4 weights x FP8 activations in one job (D-015);
+      on real data, error 14.2% vs 18.8% for FP4 on both sides
 - [ ] First energy-per-operation estimate for each format
 - [ ] Waveform walkthrough for Anele
 
@@ -124,7 +128,6 @@ deliberately planted bugs, real model data.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Accuracy check, W1 first step (exhaustive cell test, formal proof,
-planted-bug checks) and W4 first step (performance model, checked against
-the simulation) done. Next: precision v2, cross-block sums inside the engine
-(D-016), with the mixed FP4 x FP8 mode (D-015); then the tiling controller.
+Phase 1. Version 4 engine done: block totals summed inside the cell into
+FP32, mixed formats (D-015, D-016). Next: make it small and fast (shared,
+pipelined FP32 adders, D-017), then the tiling controller.

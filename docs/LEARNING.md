@@ -189,3 +189,22 @@ While answering, the model keeps notes on everything it has read so far
 (the "key/value cache"), so it doesn't re-read the whole conversation for
 each new word. These notes grow with the conversation length and the number
 of users, and must also be read from memory for every word.
+
+## FP32 and rounding once
+FP32 is the standard 32-bit floating-point format (about 7 decimal digits).
+Our cells add each block of 32 products exactly, then add that block's
+total into an FP32 running total. Only that last step rounds, and it
+rounds once, to the nearest FP32 value (on an exact tie, to the "even"
+one, which avoids drifting up or down). Rounding twice in a row can give
+a slightly different answer, which is why the design avoids it.
+
+## Overflow, infinity and subnormals
+If a total is too big for FP32 it becomes "infinity", and stays that way,
+which is easy to detect. Numbers that are too small for the normal range
+are kept with reduced precision ("subnormals") instead of being thrown
+away. Our tests deliberately hit both cases.
+
+## Area versus correctness
+A first design is built to be correct and easy to check. It is then made
+smaller and faster while the same tests keep proving it is still correct.
+Version 4 is correct but large; making it small is the next step.

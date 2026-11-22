@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -53,14 +53,44 @@ test-cell:
 	iverilog -g2012 -o $(BUILD)/tb_cell_exh rtl/pe_mx.v tests/tb_pe_mx_exhaustive.v
 	vvp -n $(BUILD)/tb_cell_exh +EXP=$(BUILD)/cell_exh.hex
 
+# Version 4: mixed-format multiplier on every possible input (1,048,576 cases)
+test-mul:
+	@mkdir -p $(BUILD)
+	python3 tools/gen_mul_exhaustive.py $(BUILD)/mul_exh.hex
+	iverilog -g2012 -o $(BUILD)/tb_mul_exh rtl/mx_mul.v tests/tb_mx_mul_exhaustive.v
+	vvp -n $(BUILD)/tb_mul_exh +EXP=$(BUILD)/mul_exh.hex
+
+# Version 4: FP32 block-total adder against an exact-fraction reference
+test-fp32:
+	@mkdir -p $(BUILD)
+	python3 tools/fp32_ref.py $(BUILD)/fp32 200000
+	iverilog -g2012 -o $(BUILD)/tb_fp32 rtl/fp32_add_fx.v tests/tb_fp32_add.v
+	vvp -n $(BUILD)/tb_fp32 +PRE=$(BUILD)/fp32 +COUNT=200000
+
+# Version 4 engine at every size (fewer jobs at 16x16, which is slow to simulate)
+V4_SCENARIOS := same mixed stress
+test-v4:
+	@mkdir -p $(BUILD)/v4
+	@for n in $(SIZES); do \
+	  jobs=60; [ $$n -ge 16 ] && jobs=15; \
+	  python3 tools/gen_v4_vectors.py $$n $(BUILD)/v4 $$jobs || exit 1; \
+	  iverilog -g2012 -DGRID_N=$$n -o $(BUILD)/v4/tb_v4_$$n \
+	    rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v4.v rtl/systolic_v4.v tests/tb_systolic_v4.v || exit 1; \
+	  for s in $(V4_SCENARIOS); do \
+	    vvp -n $(BUILD)/v4/tb_v4_$$n +PRE=$(BUILD)/v4/v4_N$${n}_$$s > $(BUILD)/v4/log_$${n}_$$s.txt; \
+	    grep -E "errors|ticks" $(BUILD)/v4/log_$${n}_$$s.txt; \
+	    grep -q '^PASS' $(BUILD)/v4/log_$${n}_$$s.txt || exit 1; \
+	  done; \
+	done
+
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)
 FORMAL_SIZES := 2 4 8
 formal:
-	@for n in $(FORMAL_SIZES); do formal/run.sh $$n || exit 1; done
+	@for n in $(FORMAL_SIZES); do formal/run.sh $$n v3 || exit 1; formal/run.sh $$n v4 || exit 1; done
 
 # Plant bugs on purpose and check the tests catch every one
-mutants: test-cell
+mutants:
 	formal/mutants.sh
 
 # Early performance model: check it against the simulated engine, then run it

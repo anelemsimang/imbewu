@@ -5,7 +5,7 @@ All chip numbers are assumptions for a concept chip. Roofline model: optimistic.
 | Chip | FP8 peak TFLOPS | FP4 peak TFLOPS | HBM TB/s | HBM GB | Links GB/s | Assumptions |
 |---|---|---|---|---|---|---|
 | imbewu-c1-v3 | 786 | 1573 | 4.0 | 96 | 800 | assumed: 256 engines of 32x32, 1.5 GHz, 4 HBM3E stacks |
-| imbewu-c1-v4 | 786 | 1573 | 4.0 | 96 | 800 | as above, engine sums many MX blocks inside (precision v2) |
+| imbewu-c1-v4 | 786 | 1573 | 4.0 | 96 | 800 | as above, version 4 engine: sums MX blocks inside into FP32 (built, simulated) |
 
 | Chip | Model | Chips | W/A | Phase | Tokens/s (total) | ms/step | Limited by | Engine use (weight layers) | Fits in memory |
 |---|---|---|---|---|---|---|---|---|---|

@@ -110,3 +110,11 @@ block of FP4 (16 beats) is shorter than the minimum job length (N beats).
 Summing many blocks inside the engine (precision v2) removes the limit:
 1.76x faster prompt processing in FP4 on the concept chip. It also removes
 the need to add partial sums outside the engine. Done before tiling.
+
+### D-017 - Share and pipeline the FP32 adders in the version 4 engine
+Version 4 is correct (docs/RESULTS.md, 2026-11-22) but each cell is 4.3x
+larger than version 3, three quarters of it the FP32 adder, and the whole
+multiply-and-add happens in one tick. Since cells in a row finish a block
+one tick apart, one adder can serve many cells in turn (one per 16 cells
+for FP4, per 32 for FP8), and it can be split over several ticks. This is
+the next hardware step, judged by the same tests and proofs.

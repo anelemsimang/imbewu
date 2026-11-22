@@ -120,12 +120,12 @@ MODELS = {
 
 CHIPS = {
     # Concept chip: ASSUMPTIONS for discussion, not a design.
-    "imbewu-c1-v3": Chip("Imbewu C1, today's engine (v3)", engines=256, N=32, clock_ghz=1.5,
+    "imbewu-c1-v3": Chip("Imbewu C1, version 3 engine", engines=256, N=32, clock_ghz=1.5,
                          hbm_tbps=4.0, hbm_gb=96, link_gbps=800, cross_block=False,
                          note="assumed: 256 engines of 32x32, 1.5 GHz, 4 HBM3E stacks"),
-    "imbewu-c1-v4": Chip("Imbewu C1, planned engine (v4)", engines=256, N=32, clock_ghz=1.5,
+    "imbewu-c1-v4": Chip("Imbewu C1, version 4 engine", engines=256, N=32, clock_ghz=1.5,
                          hbm_tbps=4.0, hbm_gb=96, link_gbps=800, cross_block=True,
-                         note="as above, engine sums many MX blocks inside (precision v2)"),
+                         note="as above, version 4 engine: sums MX blocks inside into FP32 (built, simulated)"),
 }
 
 

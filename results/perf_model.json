@@ -1,7 +1,7 @@
 {
   "chips": {
     "imbewu-c1-v3": {
-      "name": "Imbewu C1, today's engine (v3)",
+      "name": "Imbewu C1, version 3 engine",
       "engines": 256,
       "N": 32,
       "clock_ghz": 1.5,
@@ -12,7 +12,7 @@
       "note": "assumed: 256 engines of 32x32, 1.5 GHz, 4 HBM3E stacks"
     },
     "imbewu-c1-v4": {
-      "name": "Imbewu C1, planned engine (v4)",
+      "name": "Imbewu C1, version 4 engine",
       "engines": 256,
       "N": 32,
       "clock_ghz": 1.5,
@@ -20,7 +20,7 @@
       "hbm_gb": 96,
       "link_gbps": 800,
       "cross_block": true,
-      "note": "as above, engine sums many MX blocks inside (precision v2)"
+      "note": "as above, version 4 engine: sums MX blocks inside into FP32 (built, simulated)"
     }
   },
   "models": {

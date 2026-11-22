@@ -259,3 +259,54 @@ performance per watt (G5) until the energy-per-operation estimate and W2.
 Adding up partial sums outside the engine (today's engine) is not costed.
 No comparison with other companies' chips is made here; spec-sheet
 comparisons would not be like for like.
+
+## 2026-11-22 - Version 4 engine: block totals inside the cell, mixed formats
+
+**What changed** (decisions D-015 and D-016). Files: `rtl/mx_mul.v`,
+`rtl/fp32_add_fx.v`, `rtl/pe_v4.v`, `rtl/systolic_v4.v`.
+1. **Mixed formats.** Each side of a job has its own format, so FP8
+   activations can be multiplied by FP4 weights (and any other pairing of
+   INT8, FP8 and FP4).
+2. **Many MX blocks per job.** A job is now a whole row times a whole column
+   (any length). Inside each block of 32 the cell adds exactly, as before;
+   at the end of each block it applies the block's two scales and adds the
+   result into a normal FP32 total, rounding once. The chip's output is now
+   ordinary FP32 numbers, with nothing left to add up outside.
+3. Jobs are long, so the 16-beat FP4 block no longer wastes half the engine
+   on large grids (the problem found by the performance model).
+
+**Checks** (all against independent Python references; `make test`):
+
+| Check | Cases | Errors |
+|---|---|---|
+| Mixed-format multiplier, every possible input (16 format pairs) | 1,044,484 (+4,092 FP8 NaN skipped) | 0 |
+| FP32 block-total adder vs exact-fraction reference (incl. 48,148 overflows, 16,618 tiny results, 657 exact ties, 12,530 near-cancellations) | 200,000 | 0 |
+| Whole engine, 4x4 / 8x8 / 16x16: same formats, mixed formats, stress (extreme scales, exact cancellation, odd block lengths, gaps, tiny results) | 28,800 FP32 results | 0 |
+| Formal proof of output rules R1-R2 (all time), v4 at 2x2, 4x4, 8x8 | - | proven |
+| Planted bugs (8 new for v4, e.g. ties rounded wrongly, sticky bits ignored, INT8 factor missing, total not cleared between jobs) | 18 total | all caught |
+| Timing rule used by the performance model, vs v4 simulation | 4 runs | exact |
+
+**Real model data, one job per output** (`tools/real_model_on_chip_v4.py`):
+Qwen2.5-0.5B, layer 0, a 16x896 by 896x16 multiply as a single job of
+28 MX blocks on the 16x16 engine. The chip's FP32 answer equals the
+reference bit for bit in all four configurations:
+
+| Activations x weights | Beats | Error vs full precision |
+|---|---|---|
+| INT8 x INT8 | 896 | 0.94% |
+| FP8 x FP8 | 896 | 3.85% |
+| FP4 x FP4 | 448 | 18.84% |
+| **FP8 x FP4 (new mixed mode)** | 896 | **14.22%** |
+
+The mixed mode keeps FP4's memory saving for weights and cuts the error by
+a quarter compared with FP4 on both sides.
+
+**The cost (stated honestly).** One v4 cell is 11,260 generic logic cells,
+4.3x the v3 cell (2,646). The multiplier is 2,077; the FP32 adder is 8,423,
+three quarters of the cell. Also, the multiply, the 48-bit add and the FP32
+add all happen in one tick, which would limit the clock speed. Both are
+expected for a first version that is correct before it is small. Fix
+planned (D-017): cells in a row reach the end of a block one tick apart,
+so one FP32 adder can serve many cells in turn, and the adder can be split
+over several ticks (pipelined). Estimated cell size with one shared adder
+per 16 cells: about 3,000, close to v3.

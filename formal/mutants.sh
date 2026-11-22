@@ -3,15 +3,38 @@
 # that the exhaustive cell test or the formal proof catches it.
 # Usage: formal/mutants.sh      (run from the repo root, after make test-cell)
 OUT=build/mutants; mkdir -p $OUT
+# vectors needed by the checkers (independent Python references)
+[ -f build/cell_exh.hex ] || python3 tools/gen_cell_exhaustive.py build/cell_exh.hex
+[ -f build/mul_exh.hex ]  || python3 tools/gen_mul_exhaustive.py build/mul_exh.hex
+[ -f build/fp32_stim.hex ] || python3 tools/fp32_ref.py build/fp32 200000
+mkdir -p build/v4; [ -f build/v4/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v4
+V4="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v4.v rtl/systolic_v4.v"
+v4sim() {   # run the 4x4 version 4 tests with one file replaced
+    local files=$(echo $V4 | sed "s#$1#$2#")
+    iverilog -g2012 -DGRID_N=4 -o $OUT/tb4 $files tests/tb_systolic_v4.v || return 1
+    for sc in same mixed stress; do
+        vvp -n $OUT/tb4 +PRE=build/v4/v4_N4_$sc | grep -q '^PASS' || return 1
+    done
+}
 caught=0; total=0
-mutate() {   # file, description, sed expression, checker (cell|formal)
+mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|formal)
     local src=$1 desc=$2 expr=$3 kind=$4 m=$OUT/m.v
     sed "$expr" $src > $m
     if cmp -s $src $m; then echo "SETUP ERROR (no change): $desc"; exit 1; fi
+    # the planted bug must still be valid Verilog, so a "catch" is a real catch
+    yosys -q -p "read_verilog -DFORMAL $m" > /dev/null 2>&1 || { echo "SETUP ERROR (does not parse): $desc"; exit 1; }
     total=$((total+1))
     if [ $kind = cell ]; then
         iverilog -g2012 -o $OUT/tb $m tests/tb_pe_mx_exhaustive.v && \
           vvp -n $OUT/tb +EXP=build/cell_exh.hex | grep -q '^PASS' && r=missed || r=caught
+    elif [ $kind = mul ]; then
+        iverilog -g2012 -o $OUT/tb $m tests/tb_mx_mul_exhaustive.v && \
+          vvp -n $OUT/tb +EXP=build/mul_exh.hex | grep -q '^PASS' && r=missed || r=caught
+    elif [ $kind = fadd ]; then
+        iverilog -g2012 -o $OUT/tb $m tests/tb_fp32_add.v && \
+          vvp -n $OUT/tb +PRE=build/fp32 +COUNT=200000 | grep -q '^PASS' && r=missed || r=caught
+    elif [ $kind = v4 ]; then
+        v4sim $src $m && r=missed || r=caught
     else
         SYS=$m formal/run.sh 4 > /dev/null 2>&1 && r=missed || r=caught
     fi
@@ -29,5 +52,15 @@ mutate $S "last row of each job dropped"             's/draining    <= (rd_row !
 mutate $S "output exponent off by one"               's/10'"'"'d272/10'"'"'d271/' formal
 mutate $S "first row uses the previous job's scales" 's/row_exp(sa_slot\[rd_slot\], sb_slot\[rd_slot\], 0)/row_exp(sa_slot[cur_slot], sb_slot[cur_slot], 0)/' formal
 mutate $S "row number not advanced"                  's/rd_row      <= rd_row + 1'"'"'b1;/rd_row      <= rd_row;/' formal
+echo "version 4 engine:"
+M=rtl/mx_mul.v; F=rtl/fp32_add_fx.v; Q=rtl/pe_v4.v
+mutate $M "mixed job: FP4 side reads the wrong half of its lane"  's/2'"'"'d2: dec = dec4(x\[3:0\]);/2'"'"'d2: dec = dec4(x[7:4]);/' mul
+mutate $F "FP32 rounding: ties always rounded up"     's/(g \&\& (st || n_wide\[0\]))/(g)/' fadd
+mutate $F "FP32 rounding: sticky bits ignored"        's/if (k < s - 1 \&\& R\[k\]) st = 1'"'"'b1;/if (k < s - 1 \&\& R[k]) st = 1'"'"'b0;/' fadd
+mutate $F "FP32 overflow not turned into infinity"    's/biased >= 13'"'"'sd255/biased >= 13'"'"'sd256/' fadd
+mutate $F "FP32 smallest step (subnormals) wrong"     's/if (lsb < -13'"'"'sd149) lsb = -13'"'"'sd149;/if (lsb < -13'"'"'sd148) lsb = -13'"'"'sd148;/' fadd
+mutate $Q "MX INT8 factor missing on the B side"      '50s/11'"'"'sd6 : 11'"'"'sd0/11'"'"'sd0 : 11'"'"'sd0/' v4
+mutate $Q "block total not cleared at block end"      '72s/partial <= 48'"'"'sd0;/partial <= x;/' v4
+mutate $Q "FP32 total not cleared between jobs"       '75s/acc <= 32'"'"'d0;/acc <= acc;/' v4
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]
