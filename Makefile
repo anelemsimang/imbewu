@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -99,12 +99,17 @@ test-v5:
 	  done; \
 	done
 
+# Tiling controller + version 5 engine: whole matrix multiplies (10 shapes/formats)
+test-tile:
+	tests/run_tile_tests.sh
+
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)
 FORMAL_SIZES := 2 4 8
 formal:
 	@for n in $(FORMAL_SIZES); do formal/run.sh $$n v3 || exit 1; formal/run.sh $$n v4 || exit 1; done
 	@formal/run.sh 4 v5 2 && formal/run.sh 4 v5 4 && formal/run.sh 8 v5 4 && formal/run.sh 8 v5 8
+	@formal/run.sh 4 mm 4 && formal/run.sh 8 mm 8 && formal/run.sh 16 mm 16
 
 # Plant bugs on purpose and check the tests catch every one
 mutants:

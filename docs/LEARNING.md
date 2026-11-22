@@ -208,3 +208,15 @@ away. Our tests deliberately hit both cases.
 A first design is built to be correct and easy to check. It is then made
 smaller and faster while the same tests keep proving it is still correct.
 Version 4 is correct but large; making it small is the next step.
+
+## Tiling
+The engine computes one small square piece (a "tile") of the answer at a
+time. A big matrix multiply is cut into many tiles, and a controller feeds
+them to the engine one after another without pauses. Like tiling a floor:
+the same small square, laid many times, covers any size of room.
+
+## SRAM and data layout
+SRAM is the fast memory on the chip itself. It can deliver one wide word
+per tick. The compiler arranges the numbers in memory so that each word
+holds exactly what the engine needs in that tick; arranging data well is
+as important for speed as the engine itself.

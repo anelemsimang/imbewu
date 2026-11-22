@@ -46,6 +46,10 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         v4sim $src $m && r=missed || r=caught
     elif [ $kind = v5 ]; then
         v5sim $src $m && r=missed || r=caught
+    elif [ $kind = tile ]; then
+        rm -rf $OUT/tile; OUT=$OUT/tile MM=$m tests/run_tile_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = formalmm ]; then
+        SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
         SYS=$m formal/run.sh 4 v5 4 > /dev/null 2>&1 && r=missed || r=caught
     else
@@ -82,5 +86,11 @@ mutate $P5 "block total not cleared at block end"            's/if (v_r) partial
 mutate $P5 "FP32 total not cleared between jobs"             's/                    acc <= 32'"'"'d0;/                    acc <= wb_sum;/' v5
 mutate $S5 "rows read out one tick too early"                's/localparam LAT = 2;/localparam LAT = 1;/' formal5
 mutate $S5 "adder requests not picked from the whole group"  's/for (c = J0; c < J1; c = c + 1)/for (c = J0; c < J1 - 1; c = c + 1)/' v5
+echo "tiling controller:"
+T=rtl/matmul_unit.v
+mutate $T "block counter never advances (wrong scales)"     's/if (last_inblk) begin bib <= 0; blk <= blk + 1'"'"'b1; end/if (last_inblk) begin bib <= 0; blk <= blk; end/' tile
+mutate $T "answers written to the wrong place"              's/c_addr <= (omt \* N + o_idx) \* cfg_nt + ont;/c_addr <= (omt * N + o_idx) + ont;/' tile
+mutate $T "job end marked at every block end"               's/t_jl <= run \& last_beat;/t_jl <= run \& last_inblk;/' formalmm
+mutate $T "skips every other row of tiles"                  's/begin nt <= 0; mt <= mt + 1'"'"'b1; end/begin nt <= 0; mt <= mt + 2'"'"'d2; end/' formalmm
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

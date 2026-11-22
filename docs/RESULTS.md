@@ -354,3 +354,35 @@ jobs, FP32 results, mixed formats, full FP4 speed.
 
 **Still open:** clock speed is not measured yet (needs the physical flow,
 W2); the 48-bit block total and the adder halves are the longest paths.
+
+## 2026-11-22 - Tiling controller: whole matrix multiplies
+
+**What it is.** `rtl/matmul_unit.v`: a controller plus the version 5
+engine. Given matrices A (M x K) and B (K x Nc) in on-chip memory, it
+splits the answer C into N x N tiles, feeds the engine one job per tile
+back to back (no gaps), and writes C to memory. The memories are modelled
+as simple on-chip SRAM: one read per tick, answer one tick later. The
+compiler lays data out so that each read gives the engine a full set of
+lanes (layout documented in the file). Sizes must be multiples of N
+(software pads with zeros).
+
+**Checks:**
+
+| Check | Result |
+|---|---|
+| 10 whole multiplies: engines 4x4, 8x8, 16x16; C from 2x1 to 4x4 tiles; K from 32 to 256; INT8, FP8, FP4, FP8 x FP4, INT8 x FP4 (`make test-tile`) | every C value bit exact vs the independent reference |
+| Formal proof, for every allowed configuration and for all time: jobs always have at least N beats (C1), blocks at least min(16, N) beats (C2), every job ends a block and has no gaps (C3), exactly MT x NT jobs per start (C4) | proven at 4x4, 8x8, 16x16 |
+| Planted bugs (4 new: wrong scale address, wrong C address, wrong job end, skipped tiles) | 27 of 27 caught in total |
+
+The proof found that, in principle, a start signal arriving at the wrong
+moment could restart the controller in the middle of a job; the controller
+now ignores a start while it is running.
+
+**Speed.** Start to finish takes exactly (beats fed to the engine) + 2N + 4
+ticks in all 10 runs: the overhead is paid once per whole multiply, not per
+tile. Engine busy time: 91-99% for the runs on the 4x4 engine; it grows
+towards 100% as matrices grow (64% only for a tiny 2-tile run on 16x16).
+
+**What it does not do yet:** fetch data from HBM while computing (the data
+mover, Phase 2), handle sizes that are not multiples of N in hardware, or
+run several engines in parallel.

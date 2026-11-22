@@ -1,6 +1,6 @@
 #!/bin/sh
 # Formal proof of the engine's output rules (see formal/fv_*.v).
-# Usage: formal/run.sh N [v3|v4|v5] [G]   (default v3; G = cells per shared adder, v5)
+# Usage: formal/run.sh N [v3|v4|v5|mm] [G]   (default v3; G = cells per shared adder, v5)
 # Needs: yosys, yosys-smtbmc (come with Yosys) and the Yices solver
 #        (pip install yices-solver).
 #
@@ -15,7 +15,12 @@ BASE=$((2 * N + 4))       # base case depth: long enough for a whole job to come
 V=${2:-v3}
 G=${3:-2}
 PARAMS="chparam -set N $N"
-if [ "$V" = v5 ]; then
+if [ "$V" = mm ]; then
+  TOP=fv_matmul_unit
+  SRC="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v ${SYS:-rtl/matmul_unit.v}"
+  PARAMS="chparam -set N $N -set G $G"
+  K=8; BASE=8
+elif [ "$V" = v5 ]; then
   TOP=fv_systolic_v5
   SRC="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v ${SYS:-rtl/systolic_v5.v}"
   PARAMS="chparam -set N $N -set G $G"
@@ -37,7 +42,9 @@ yosys -q -p "read_verilog -formal $SRC formal/$TOP.v; \
 status() { tail -1 | sed 's/.*Status: //'; }
 B=$(yosys-smtbmc -s yices -t $BASE $M | status)
 I=$(yosys-smtbmc -s yices -i -t $K $M | status)
-C=$(yosys-smtbmc -s yices -c -t $((4 * N + 8)) $M | status)
+CD=$((4 * N + 8)); [ "$V" = mm ] && CD=$((4 * N + 40))
+C=$(yosys-smtbmc -s yices -c -t $CD $M | status)
 [ "$V" = v5 ] && V="v5 (G=$G)"
+[ "$V" = mm ] && V="tiling controller (G=$G)"
 echo "formal $V ${N}x${N}: base case $B, induction step $I, back-to-back jobs reachable $C"
 [ "$B" = PASSED ] && [ "$I" = PASSED ] && [ "$C" = PASSED ]

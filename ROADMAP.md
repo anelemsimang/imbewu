@@ -20,8 +20,9 @@ design effort (see DECISIONS.md, D-013).
 - [x] Streaming engine (`rtl/systolic_stream.v`): jobs back to back, utilisation
       33% -> 99.5% at 4x4, 8x8 and 16x16, 0 errors (see docs/RESULTS.md)
 - [x] Long products: the shared dimension K can be any length >= N
-- [ ] Larger matrices: a controller that breaks big matrices into blocks the
-      grid can handle ("tiling") and schedules them
+- [x] Larger matrices: tiling controller (`rtl/matmul_unit.v`) splits C into
+      N x N tiles and runs them back to back; bit exact on 10 multiplies,
+      formally proven to obey the engine's rules; overhead 2N+4 ticks per multiply
 - [x] Precision flexibility v1 (`rtl/systolic_mx.v`): INT8, FP8 E4M3 and FP4 E2M1
       with OCP MX block scales, format switchable per job, exact results,
       FP4 at 2x speed; 0 errors in 336,000 checked results (see docs/RESULTS.md)
@@ -132,5 +133,6 @@ deliberately planted bugs, real model data.
 ## Current position
 Phase 1. Version 5 engine done and is the reference design (D-018): FP32
 block totals inside the cells, mixed formats, shared two-tick adders.
-Next: the tiling controller (break big matrices into jobs), then a first
-physical-size and clock-speed estimate (W2).
+Tiling controller done. Next: a first physical-size and clock-speed
+estimate with the open layout flow (W2), then Phase 2 (tile memory and
+data mover).
