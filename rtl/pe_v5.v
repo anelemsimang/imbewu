@@ -6,8 +6,9 @@
 //  * The multiply has its own tick: the product is stored in p_r, and the
 //    block total is updated from it one tick later.
 //  * The cell has no FP32 adder. At the end of each block it sends a
-//    request (exact block total x, exponent e, and its FP32 total acc) to an
-//    adder SHARED by a group of cells in the same row (systolic_v5.v). Two
+//    request (its block total so far and its last product, which the adder
+//    adds, the exponent e, and its FP32 total acc) to an
+//    adder SHARED by a group of cells in the same row (systolic_v5.v). Six
 //    ticks later the adder sends the new total back (wb_*).
 // Results are bit-for-bit the same as version 4.
 module pe_v5 (
@@ -34,7 +35,8 @@ module pe_v5 (
     // request to the shared FP32 adder
     output wire               req_v,
     output wire               req_jl,
-    output wire signed [47:0] req_x,
+    output wire signed [47:0] req_part,   // block total so far (the adder adds req_p)
+    output wire signed [47:0] req_p,      // this tick's product
     output wire signed [10:0] req_e,
     output wire [31:0]        req_acc,
     // answer from the shared FP32 adder
@@ -60,7 +62,8 @@ module pe_v5 (
 
     assign req_v   = v_r & be_r;
     assign req_jl  = jl_r;
-    assign req_x   = x;
+    assign req_part = partial;
+    assign req_p    = p_r;
     assign req_e   = e_r;
     assign req_acc = acc;
 

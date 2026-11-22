@@ -61,7 +61,8 @@ module systolic_v5 #(
     // request / answer wires of every cell
     wire        rq_v   [0:N-1][0:N-1];
     wire        rq_jl  [0:N-1][0:N-1];
-    wire [47:0] rq_x   [0:N-1][0:N-1];
+    wire [47:0] rq_pt  [0:N-1][0:N-1];   // block total so far
+    wire [47:0] rq_p   [0:N-1][0:N-1];   // last product
     wire [10:0] rq_e   [0:N-1][0:N-1];
     wire [31:0] rq_acc [0:N-1][0:N-1];
     wire        wb_v   [0:N-1][0:N-1];
@@ -102,7 +103,7 @@ module systolic_v5 #(
                 wire [7:0] ao, bo, sao, sbo;
                 wire [1:0] fao, fbo;
                 wire vo, blo, jlo;
-                wire signed [47:0] qx;
+                wire signed [47:0] qpt, qp;
                 wire signed [10:0] qe;
                 pe_v5 u_pe (
                     .clk(clk), .rst(rst),
@@ -111,11 +112,12 @@ module systolic_v5 #(
                     .b_in(bi[17:10]), .fb_in(bi[9:8]), .sb_in(bi[7:0]),
                     .a_out(ao), .fa_out(fao), .sa_out(sao), .v_out(vo), .bl_out(blo), .jl_out(jlo),
                     .b_out(bo), .fb_out(fbo), .sb_out(sbo),
-                    .req_v(rq_v[i][j]), .req_jl(rq_jl[i][j]), .req_x(qx), .req_e(qe),
+                    .req_v(rq_v[i][j]), .req_jl(rq_jl[i][j]), .req_part(qpt), .req_p(qp), .req_e(qe),
                     .req_acc(rq_acc[i][j]),
                     .wb_v(wb_v[i][j]), .wb_jl(wb_jl[i][j / GE]), .wb_sum(wb_sum[i][j / GE]),
                     .res(res));
-                assign rq_x[i][j] = qx;
+                assign rq_pt[i][j] = qpt;
+                assign rq_p[i][j]  = qp;
                 assign rq_e[i][j] = qe;
                 assign a_bus[i][j+1] = {ao, fao, sao, vo, blo, jlo};
                 assign b_bus[i+1][j] = {bo, fbo, sbo};
@@ -131,16 +133,17 @@ module systolic_v5 #(
                 localparam J1 = ((g + 1) * GE < N) ? (g + 1) * GE : N;
                 // pick the requesting cell (at most one per tick, by the rules)
                 reg        s_v, s_jl;
-                reg [47:0] s_x;
+                reg [47:0] s_pt, s_p;
+                wire [47:0] s_x = s_pt + s_p;   // pick first, then add: a short hand-off
                 reg [10:0] s_e;
                 reg [31:0] s_acc;
                 reg [GW-1:0] s_who;
                 integer c;
                 always @(*) begin
-                    s_v = 1'b0; s_jl = 1'b0; s_x = 48'd0; s_e = 11'd0; s_acc = 32'd0; s_who = 0;
+                    s_v = 1'b0; s_jl = 1'b0; s_pt = 48'd0; s_p = 48'd0; s_e = 11'd0; s_acc = 32'd0; s_who = 0;
                     for (c = J0; c < J1; c = c + 1)
                         if (rq_v[i][c]) begin
-                            s_v = 1'b1; s_jl = rq_jl[i][c]; s_x = rq_x[i][c];
+                            s_v = 1'b1; s_jl = rq_jl[i][c]; s_pt = rq_pt[i][c]; s_p = rq_p[i][c];
                             s_e = rq_e[i][c]; s_acc = rq_acc[i][c]; s_who = c - J0;
                         end
                 end
