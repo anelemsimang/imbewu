@@ -99,14 +99,56 @@ def pack(fields):
     return word
 
 
+def write_vectors(N, jobs, pre, gaps=False):
+    """Write stimulus, expected rows and meta files for a list of jobs."""
+    stim_w = 4 + 4 * N * 8
+    exp_w = N * 48 + N * 10
+    stim, exp = [], []
+    valid_beats = macs = 0
+    for job in jobs:
+        for k in range(job["beats"]):
+            while gaps and random.random() < 0.3:
+                stim.append(pack([(0, 1), (random.randrange(2), 1),
+                                  (random.randrange(4), 2)] +
+                                 [(random.randrange(256), 8)] * (4 * N)))
+            a, b = lanes(job, k, N)
+            last = k == job["beats"] - 1
+            sa = job["sa"] if last else [0] * N
+            sb = job["sb"] if last else [0] * N
+            # lane i at bits [i*8 +: 8]: list most significant (lane N-1) first
+            f = [(1, 1), (int(last), 1), (job["fmt"], 2)]
+            f += [(x, 8) for x in reversed(a)] + [(x, 8) for x in reversed(b)]
+            f += [(x, 8) for x in reversed(sa)] + [(x, 8) for x in reversed(sb)]
+            stim.append(pack(f))
+            valid_beats += 1
+        macs += N * N * job["K"]
+        fmt = job["fmt"]
+        for i in range(N):
+            vals, exps = [], []
+            for j in range(N):
+                s = sum(value_x512(fmt, job["A"][i][k]) * value_x512(fmt, job["B"][k][j])
+                        for k in range(job["K"]))
+                assert -(1 << 47) <= s < (1 << 47)
+                vals.append(s)
+                exps.append(job["sa"][i] + job["sb"][j] - 272)
+            f = [(v, 48) for v in reversed(vals)] + [(e, 10) for e in reversed(exps)]
+            exp.append(pack(f))
+
+    hexw = lambda w: (w + 3) // 4
+    with open(pre + "_stim.hex", "w") as fh:
+        fh.writelines(f"{w:0{hexw(stim_w)}x}\n" for w in stim)
+    with open(pre + "_exp.hex", "w") as fh:
+        fh.writelines(f"{w:0{hexw(exp_w)}x}\n" for w in exp)
+    with open(pre + "_meta.hex", "w") as fh:
+        fh.write(f"{len(stim):x}\n{len(exp):x}\n{macs:x}\n{valid_beats:x}\n")
+
+
 def main():
     N = int(sys.argv[1])
     out = sys.argv[2]
     jobs_per = int(sys.argv[3]) if len(sys.argv) > 3 else 200
     os.makedirs(out, exist_ok=True)
     random.seed(1000 + N)
-    stim_w = 4 + 4 * N * 8
-    exp_w = N * 48 + N * 10
 
     scenarios = {
         "int8": [INT8], "fp8": [FP8], "fp4": [FP4],
@@ -122,45 +164,7 @@ def main():
             jobs.append(make_job(N, fmt, style))
         gaps = scen == "mixed_gaps"
 
-        stim, exp = [], []
-        valid_beats = macs = 0
-        for job in jobs:
-            for k in range(job["beats"]):
-                while gaps and random.random() < 0.3:
-                    stim.append(pack([(0, 1), (random.randrange(2), 1),
-                                      (random.randrange(4), 2)] +
-                                     [(random.randrange(256), 8)] * (4 * N)))
-                a, b = lanes(job, k, N)
-                last = k == job["beats"] - 1
-                sa = job["sa"] if last else [0] * N
-                sb = job["sb"] if last else [0] * N
-                # lane i at bits [i*8 +: 8]: list most significant (lane N-1) first
-                f = [(1, 1), (int(last), 1), (job["fmt"], 2)]
-                f += [(x, 8) for x in reversed(a)] + [(x, 8) for x in reversed(b)]
-                f += [(x, 8) for x in reversed(sa)] + [(x, 8) for x in reversed(sb)]
-                stim.append(pack(f))
-                valid_beats += 1
-            macs += N * N * job["K"]
-            fmt = job["fmt"]
-            for i in range(N):
-                vals, exps = [], []
-                for j in range(N):
-                    s = sum(value_x512(fmt, job["A"][i][k]) * value_x512(fmt, job["B"][k][j])
-                            for k in range(job["K"]))
-                    assert -(1 << 47) <= s < (1 << 47)
-                    vals.append(s)
-                    exps.append(job["sa"][i] + job["sb"][j] - 272)
-                f = [(v, 48) for v in reversed(vals)] + [(e, 10) for e in reversed(exps)]
-                exp.append(pack(f))
-
-        pre = os.path.join(out, f"mx_N{N}_{scen}")
-        hexw = lambda w: (w + 3) // 4
-        with open(pre + "_stim.hex", "w") as fh:
-            fh.writelines(f"{w:0{hexw(stim_w)}x}\n" for w in stim)
-        with open(pre + "_exp.hex", "w") as fh:
-            fh.writelines(f"{w:0{hexw(exp_w)}x}\n" for w in exp)
-        with open(pre + "_meta.hex", "w") as fh:
-            fh.write(f"{len(stim):x}\n{len(exp):x}\n{macs:x}\n{valid_beats:x}\n")
+        write_vectors(N, jobs, os.path.join(out, f"mx_N{N}_{scen}"), gaps)
 
 
 if __name__ == "__main__":

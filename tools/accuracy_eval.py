@@ -39,13 +39,11 @@ def round_fp4(y):
     """Round to the nearest FP4 E2M1 value, ties to even (OCP MX)."""
     a = y.abs().clamp(max=6.0)
     grid = FP4_GRID.to(a.device, a.dtype)
-    idx = torch.bucketize(a, (grid[1:] + grid[:-1]) / 2)          # nearest, ties up
-    # ties: midpoints where the lower neighbour has the even code
     mids = (grid[1:] + grid[:-1]) / 2
-    tie_low = torch.tensor([True, False, True, False, True, False, True], device=a.device)
-    for m in range(7):
-        if tie_low[m]:
-            idx = torch.where(a == mids[m], torch.full_like(idx, m), idx)
+    idx = torch.bucketize(a, mids)                 # nearest; exact ties go down
+    # ties must go to the even code: up at 0.75, 1.75 and 3.5
+    for m in (1, 3, 5):
+        idx = torch.where(a == mids[m], torch.full_like(idx, m + 1), idx)
     return torch.sign(y) * grid[idx]
 
 

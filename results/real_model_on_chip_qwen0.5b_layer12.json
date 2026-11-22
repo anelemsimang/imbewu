@@ -1,0 +1,30 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "layer": 12,
+  "matrix": "mlp.gate_proj",
+  "tile": "16x896 x 896x16",
+  "text_sample": " Robert Boulter is an English film , television and theatre actor . He had a gue",
+  "results": [
+    {
+      "format": "mxint8",
+      "jobs": 28,
+      "sim_pass": true,
+      "exact_match_software": true,
+      "relative_error_vs_fp32_pct": 0.814
+    },
+    {
+      "format": "mxfp8",
+      "jobs": 28,
+      "sim_pass": true,
+      "exact_match_software": true,
+      "relative_error_vs_fp32_pct": 3.664
+    },
+    {
+      "format": "mxfp4",
+      "jobs": 28,
+      "sim_pass": true,
+      "exact_match_software": true,
+      "relative_error_vs_fp32_pct": 11.262
+    }
+  ]
+}

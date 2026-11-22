@@ -2,6 +2,7 @@
 // tools/gen_mx_vectors.py and checks every output row bit for bit.
 //
 // Settings: -DGRID_N=8 and plusarg +PRE=build/vectors/mx_N8_fp8
+// Optional: +DUMP=<file> writes every output row ({out_row, out_exp}, hex)
 `timescale 1ns/1ps
 `ifndef GRID_N
 `define GRID_N 4
@@ -29,7 +30,8 @@ module tb_systolic_mx;
     reg [SW-1:0] stim [0:MAXB-1];
     reg [EW-1:0] expv [0:MAXR-1];
     reg [63:0]   meta [0:3];
-    reg [1023:0] pre;
+    reg [1023:0] pre, dump_name;
+    integer      dump_fd = 0;
 
     integer nb, nr, macs, vbeats, b, r_seen, errors, cyc, first_in, last_out, exp_idx;
 
@@ -44,6 +46,7 @@ module tb_systolic_mx;
                 if (errors < 6)
                     $display("MISMATCH output row %0d (job %0d, row %0d)", r_seen, r_seen / N, r_seen % N);
             end
+            if (dump_fd) $fwrite(dump_fd, "%h\n", {out_row, out_exp});
             r_seen   = r_seen + 1;
             last_out = cyc;
         end
@@ -53,6 +56,7 @@ module tb_systolic_mx;
         if (!$value$plusargs("PRE=%s", pre)) begin
             $display("need +PRE=<vector prefix>"); $finish;
         end
+        if ($value$plusargs("DUMP=%s", dump_name)) dump_fd = $fopen(dump_name, "w");
         $readmemh({pre, "_meta.hex"}, meta);
         nb = meta[0]; nr = meta[1]; macs = meta[2]; vbeats = meta[3];
         $readmemh({pre, "_stim.hex"}, stim, 0, nb - 1);
@@ -79,6 +83,7 @@ module tb_systolic_mx;
                  N, N, pre, macs, N*N, last_out - first_in + 1,
                  (macs / (N*N)) / (last_out - first_in + 1),
                  ((100 * (macs / (N*N))) / (last_out - first_in + 1)) % 100);
+        if (dump_fd) $fclose(dump_fd);
         if (errors == 0) $display("PASS"); else $display("FAIL");
         $finish;
     end
