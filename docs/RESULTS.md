@@ -204,3 +204,58 @@ are right for every input. Those are checked by the exhaustive cell test
 plus 336,000 random simulation answers, not by proof. Solvers struggle with
 multipliers; the usual industry method is equivalence checking against a
 reference, planned later. Not done yet: coverage measurement, Verilator lint.
+
+## 2026-11-22 - Early performance model (W4)
+
+**What it is.** `tools/perf_model.py` (`make perf`) estimates how fast an
+Imbewu data-centre chip would run large language models, and which part of
+the chip limits it: compute, memory (HBM) or chip-to-chip links.
+
+**Checked against the simulated chip first.** The model's rule for how many
+ticks the engine needs was compared with the RTL simulation on 9 job
+streams (sizes 4, 8, 16; FP8, FP4, mixed lengths): **predicted = measured,
+exactly, in all 9**.
+
+**Concept chip "C1": assumptions, not a design.** 256 engines of 32x32
+cells, 1.5 GHz, 4 HBM3E memory stacks (4 TB/s, 96 GB), 800 GB/s of links.
+That is 786 TFLOPS FP8 peak and 1,573 TFLOPS FP4 peak. Two versions:
+v3 = today's engine; v4 = planned engine that sums many MX blocks inside.
+Workloads: the public shapes of 8B-class and 70B-class open models (Llama 3
+configurations), 4,096 tokens of context. Full table: `results/perf_model.md`.
+
+| Workload (one C1 chip unless stated) | FP8 | FP4, today's engine | FP4, planned engine |
+|---|---|---|---|
+| 8B: read a 4k prompt (tokens/s) | 48,800 | 48,800 | 86,100 |
+| 8B: answer one user (tokens/s) | 501 | 889 | 889 |
+| 8B: answer 64 users (tokens/s, total) | 10,300 | 12,000 | 12,000 |
+| 70B: answer one user, 1 chip | 55 | 105 | 105 |
+| 70B: answer one user, 4 chips | 221 | 420 | 420 |
+| 70B: read a 4k prompt, 4 chips | 21,300 | 21,300 | 39,700 |
+
+**What the model tells us.**
+1. **Answering is limited by memory, not compute (goal G3 matters most).**
+   When one user is served, the engines sit idle about 97% of the time,
+   waiting for the model's weights to arrive from HBM. Speed per user is
+   roughly memory bandwidth divided by model size. Faster memory, smaller
+   weights (FP4) and serving many users at once are what help.
+2. **Today's engine cannot use FP4's double speed.** An MX block of 32 FP4
+   numbers takes only 16 beats, but a 32x32 engine needs jobs of at least 32
+   beats, so half the time is padding (50% engine use). The planned engine
+   that sums many blocks inside fixes this: 1.76x faster prompt reading.
+   This makes precision v2 (cross-block sums) the top hardware priority
+   for grids larger than 16x16 (decision D-016).
+3. **FP4 weights nearly double answering speed** (501 to 889 tokens/s)
+   because there is half as much to read from memory. The accuracy check
+   showed FP4 weights need FP8 activations, so the mixed FP4 x FP8 mode
+   (D-015) is what turns this into a real gain.
+4. **Four chips answer four times faster** for the 70B model: each reads a
+   quarter of the weights. With 800 GB/s links, the links never limit (G2),
+   but that needs checking with a real link model.
+5. A 70B model in FP8 serving 64 users does not fit in one chip's 96 GB.
+
+**Limits (stated honestly).** Assumed chip numbers. Perfect overlap of
+compute, memory and links (optimistic). No power model yet, so no
+performance per watt (G5) until the energy-per-operation estimate and W2.
+Adding up partial sums outside the engine (today's engine) is not costed.
+No comparison with other companies' chips is made here; spec-sheet
+comparisons would not be like for like.

@@ -92,10 +92,13 @@ deliberately planted bugs, real model data.
       on the simulated Imbewu design
 
 ### W4 - Performance model early (limitation 1: specification)
-- [ ] First analytical performance model now, not at the end: given a design
+- [x] First analytical performance model now, not at the end: given a design
       (grid size, memory, bandwidth), how fast does a real language model run
       and where does it wait? Use it to choose designs before building them
 - [ ] Check the model against our own simulations as they grow
+      (engine part checked: exact match on 9 job streams; memory, links and
+      tiling to be checked as those blocks are built)
+- [ ] Power model, so performance per watt (G5) can be estimated
 - [ ] Optionally cross-check with MIT's open Timeloop / Accelergy tools
 
 ### W5 - People, partners and gatekeepers (limitation 6; founder-led)
@@ -121,7 +124,7 @@ deliberately planted bugs, real model data.
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Accuracy check done; W1 first step done (exhaustive cell test,
-formal proof of the engine's output rules, planted-bug checks). Next: W4
-(early performance model), then the mixed FP4 x FP8 mode and the tiling
-controller.
+Phase 1. Accuracy check, W1 first step (exhaustive cell test, formal proof,
+planted-bug checks) and W4 first step (performance model, checked against
+the simulation) done. Next: precision v2, cross-block sums inside the engine
+(D-016), with the mixed FP4 x FP8 mode (D-015); then the tiling controller.

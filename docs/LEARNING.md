@@ -169,3 +169,23 @@ see why each step follows.
 Testing the tests. We deliberately break the design in small ways and
 check that the tests notice. A test that still passes on a broken design is
 not protecting us.
+
+## Roofline (which part of the chip is the bottleneck)
+Every task needs some calculating and some fetching of data from memory.
+If the chip can calculate faster than memory can deliver, the task is
+"memory bound": buying more calculators won't help. If memory is fast enough
+and the calculators are busy, it is "compute bound". A roofline model just
+works out both times and takes the bigger one.
+
+## Prefill and decode
+A language model reads your whole prompt at once ("prefill"): lots of
+calculating per number fetched, so it is compute bound. Then it writes its
+answer one word at a time ("decode"): for every single word it must read
+all of its weights from memory again, so it is memory bound. This is why
+memory bandwidth (goal G3) decides how fast a chatbot answers.
+
+## KV cache
+While answering, the model keeps notes on everything it has read so far
+(the "key/value cache"), so it doesn't re-read the whole conversation for
+each new word. These notes grow with the conversation length and the number
+of users, and must also be read from memory for every word.

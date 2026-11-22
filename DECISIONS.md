@@ -102,3 +102,11 @@ So: INT8 and FP8 are the default inference formats; FP4 is offered for
 weights, paired with FP8 activations. The engine will gain a mode where the
 two inputs of a job use different formats. FP4 accuracy techniques (smaller
 blocks, rotations) will be evaluated in software before adding hardware.
+
+### D-016 - Cross-block sums inside the engine are the next hardware priority
+The performance model (docs/RESULTS.md, 2026-11-22) shows today's engine
+cannot use FP4's double speed on grids larger than 16x16, because one MX
+block of FP4 (16 beats) is shorter than the minimum job length (N beats).
+Summing many blocks inside the engine (precision v2) removes the limit:
+1.76x faster prompt processing in FP4 on the concept chip. It also removes
+the need to add partial sums outside the engine. Done before tiling.

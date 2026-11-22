@@ -4,7 +4,7 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell formal mutants synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell formal mutants perf synth clean
 
 test: test-mac test-systolic test-stream test-mx test-cell
 
@@ -62,6 +62,12 @@ formal:
 # Plant bugs on purpose and check the tests catch every one
 mutants: test-cell
 	formal/mutants.sh
+
+# Early performance model: check it against the simulated engine, then run it
+perf:
+	python3 tools/perf_model.py --validate
+	python3 tools/perf_model.py > /dev/null
+	@echo "written: results/perf_model.md"
 
 synth:
 	@mkdir -p $(BUILD)
