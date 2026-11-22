@@ -76,3 +76,20 @@ docs/RESULTS.md. FP4 packs two numbers per lane for 2x speed.
 Expected answers for the multi-format engine come from tools/gen_mx_vectors.py,
 which decodes numbers with the public ml_dtypes library, not with logic copied
 from the design, so a shared mistake in design and test is unlikely.
+
+### D-013 - Workstreams answering the limits of an AI-led design team
+An external review (another AI tool, shared by the founder) listed six
+limits of a founder-plus-AI team: specification, complexity, verification,
+physical design, software stack and industry gatekeepers. All six are real;
+none blocks the simulation-based pitch, and our plan already requires human
+engineers before money is spent on manufacturing. In response the roadmap
+adds five workstreams: W1 verification depth (formal proofs, coverage,
+lint), W2 real physical numbers (open layout flow), W3 software stack
+(PyTorch to Imbewu), W4 an early performance model, W5 people and partners
+(external review, advisor, design house, export-control advice). The
+software stack was the largest gap in the earlier plan.
+
+### D-014 - Honest scope statement in all pitch material
+Every pitch document states plainly that simulation proves the architecture
+works, not that the chip is ready to manufacture, and names what is needed
+to get there (engineers, licensed blocks, a design house, funding).

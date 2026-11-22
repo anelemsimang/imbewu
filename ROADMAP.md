@@ -3,6 +3,10 @@
 Goal: a simulation-ready pitch package for the Imbewu data-centre AI
 accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
 
+The phases below build the hardware. Alongside them run five workstreams
+(section "Workstreams") that answer the known limitations of an AI-led
+design effort (see DECISIONS.md, D-013).
+
 ## Phase 0 - Foundation ✅ done
 - [x] Repository, vision, decision log, learning notes
 - [x] Free simulation toolchain (Icarus Verilog, Yosys)
@@ -24,6 +28,9 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
 - [ ] Precision v2: shared exponent alignment per block (smaller cells),
       4x FP4 packing, FP8 E5M2, NaN handling
 - [ ] BF16 for training, and FP32 totals across many MX blocks
+- [x] Real model numbers on the chip: Qwen2.5-0.5B activations and weights run
+      through the 16x16 engine in simulation; output matches software exactly
+      (`tools/real_model_on_chip.py`, `results/`)
 - [ ] Accuracy check: run each format on real AI model data and measure the loss
 - [ ] First energy-per-operation estimate for each format
 - [ ] Waveform walkthrough for Anele
@@ -46,6 +53,52 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
 - [ ] Collective operations in hardware (the data exchanges chips do during
       training, such as all-reduce), so chips don't sit idle
 
+## Workstreams (run alongside the phases)
+
+### W1 - Verification depth (limitation 3: "PASS doesn't prove it works")
+Already in place: random tests against independent reference models,
+deliberately planted bugs, real model data.
+- [ ] Formal verification with SymbiYosys (free): mathematically prove key
+      properties of each block (no lost or duplicated results, correct
+      read-out order, no overflow within the stated limits)
+- [ ] Coverage measurement: report which parts of each design the tests reached
+- [ ] Assertions inside the designs, checked during every simulation
+- [ ] Lint checks (Verilator) on every design, run by `make test`
+- [ ] One command that re-runs every test after every change
+- [ ] Later, with funding: FPGA prototype running real models at real speed
+
+### W2 - Real physical numbers (limitation 4: no secret factory rules)
+- [ ] Run the Imbewu tile through the open-source layout flow (OpenLane /
+      OpenROAD) on open factory rules (GF180 or SkyWater 130 nm): real area,
+      clock speed and power, replacing generic logic-cell counts
+- [ ] Scale those numbers to modern processes using published industry data,
+      clearly labelled as estimates
+- [ ] List of blocks that must be licensed (HBM interface, high-speed links,
+      PCIe) with indicative costs, for the cost plan
+
+### W3 - Software stack (limitation 5: the "CUDA moat")
+- [ ] Instruction set for the tile, designed together with its compiler
+- [ ] Simple compiler path: one PyTorch layer -> Imbewu instructions ->
+      simulated tile, checked against PyTorch's own answer
+- [ ] Build on open compiler frameworks (MLIR / IREE or TVM), not from scratch
+- [ ] Goal for the pitch: a real (small) language model running end to end
+      on the simulated Imbewu design
+
+### W4 - Performance model early (limitation 1: specification)
+- [ ] First analytical performance model now, not at the end: given a design
+      (grid size, memory, bandwidth), how fast does a real language model run
+      and where does it wait? Use it to choose designs before building them
+- [ ] Check the model against our own simulations as they grow
+- [ ] Optionally cross-check with MIT's open Timeloop / Accelergy tools
+
+### W5 - People, partners and gatekeepers (limitation 6; founder-led)
+- [ ] External technical review of the architecture before the pitch
+      (university chip-design group or independent consultant)
+- [ ] Technical advisor, then technical co-founder (experienced chip architect)
+- [ ] University partnerships for review and graduate talent
+- [ ] Shortlist of design-house partners for physical design and foundry access
+- [ ] Legal advice on export controls (buying and building advanced AI chips)
+
 ## Phase 4 - Performance model and pitch pack  (all goals)
 - [ ] Training model: time to train a large language model on N Imbewu chips (G1, G2, G3)
 - [ ] Inference model: tokens per second, response time, users served, and
@@ -53,9 +106,14 @@ accelerator. Tags G1-G5 refer to the five design goals in VISION.md.
 - [ ] Power model: performance per watt and per rand, at chip and data-centre scale (G5)
 - [ ] Honest comparison with existing chips on all five goals
 - [ ] Architecture document for engineers and reviewers
+- [ ] External human review completed and its findings addressed (W5)
+- [ ] Clear statement in every pitch document: simulation proves the
+      architecture works; it does not prove the chip is ready to manufacture
 - [ ] Pitch deck, cost-to-silicon plan, team plan, design-vs-buy list
 - [ ] Optional, founder to decide: a small piece of the Imbewu tile on real silicon
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
 
 ## Current position
-Phase 1. Next step: accuracy check of INT8 / FP8 / FP4 on real AI model data.
+Phase 1. In progress: accuracy check of INT8 / FP8 / FP4 on three public
+language models. Next: write up results, then start W1 (formal verification)
+and W4 (early performance model) alongside tiling.

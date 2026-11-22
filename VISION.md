@@ -87,3 +87,12 @@ chip and its pitch package (D-007).
   repository up to date.
 - **Human chip engineers (later):** review the design before any money is
   spent on manufacturing.
+
+## What simulation does and doesn't prove
+
+Simulation proves the architecture works: the maths is right, the design
+scales, and real AI models run on it. It doesn't prove the chip is ready to
+manufacture. That needs experienced engineers, physical design on a modern
+process, licensed interface blocks, a software stack and funding. We say
+this plainly in every pitch (D-014), and the roadmap's workstreams (W1-W5)
+show how each gap gets closed.
