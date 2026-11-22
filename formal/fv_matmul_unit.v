@@ -1,12 +1,12 @@
 // fv_matmul_unit.v - formal proof that the tiling controller always obeys
 // the engine's rules, for every allowed configuration, for all time:
 //   C1  every job it sends has at least N beats
-//   C2  every MX block it sends has at least min(G, N) beats
+//   C2  every MX block it sends has at least max(min(G, N), 6) beats
 //   C3  every job ends with a block end, and there are no gaps inside a job
 //   C4  after a start it sends exactly MT x NT jobs, then stops
 // Configurations are free (the solver tries all of them, up to 7 x 7 tiles,
 // 7 blocks of up to 31 beats) within the rules:
-// cfg_beats = cfg_nb x cfg_bb, cfg_bb >= min(G, N), cfg_beats >= N.
+// cfg_beats = cfg_nb x cfg_bb, cfg_bb >= max(min(G, N), 6), cfg_beats >= N.
 module fv_matmul_unit #(parameter N = 4, parameter G = 2) (
     input wire clk,
     input wire start,
@@ -16,6 +16,7 @@ module fv_matmul_unit #(parameter N = 4, parameter G = 2) (
     input wire [N*8-1:0] a_data, b_data, sa_data, sb_data
 );
     localparam GE = (N < G) ? N : G;
+    localparam GB = (GE > 6) ? GE : 6;   // shortest block the engine allows
     reg init = 1'b1;
     always @(posedge clk) init <= 1'b0;
     wire rst = init;
@@ -38,7 +39,7 @@ module fv_matmul_unit #(parameter N = 4, parameter G = 2) (
     (* anyconst *) reg [4:0] k_bb;
     wire [7:0] beats = k_nb * k_bb;
     always @(*) begin
-        assume(k_mt >= 1 && k_nt >= 1 && k_nb >= 1 && k_bb >= GE);
+        assume(k_mt >= 1 && k_nt >= 1 && k_nb >= 1 && k_bb >= GB);
         assume(cfg_mt == k_mt && cfg_nt == k_nt && cfg_nb == k_nb && cfg_bb == k_bb);
         assume(cfg_beats == beats && beats >= N);
         assume(!(start && busy));         // start is only given when idle
@@ -71,7 +72,7 @@ module fv_matmul_unit #(parameter N = 4, parameter G = 2) (
         assert(f_v == p_iv && f_bl == p_ibl && f_jl == p_ijl);
         // the rules
         if (ijl) assert(jb >= N - 1);                       // C1
-        if (ibl || ijl) assert(bb >= GE - 1);               // C2
+        if (ibl || ijl) assert(bb >= GB - 1);               // C2
         if (ijl) assert(ibl);                               // C3: a job ends a block
         if (started) assert(jobs <= k_mt * k_nt);           // C4
         if (started && jobs == k_mt * k_nt) assert(!f_run);

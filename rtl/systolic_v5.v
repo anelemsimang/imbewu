@@ -2,18 +2,20 @@
 //
 // Same inputs, outputs and answers as version 4 (systolic_v4.v), but:
 //  * Each row's cells are split into groups of G (default 16). Each group
-//    shares ONE FP32 adder, split over two ticks (fp32_align_add, then
-//    fp32_round_pack). This works because cells in a row reach the end of a
-//    block one tick apart, so their requests arrive one after another.
-//  * Each cell does its multiply in its own tick (see pe_v5.v).
-// Output rows leave 2 ticks later than in version 4: row r appears
-// N + 3 + r ticks after the job's last beat.
+//    shares ONE FP32 adder. This works because cells in a row reach the end
+//    of a block one tick apart, so their requests arrive one after another.
+//  * Short steps for a fast clock: each cell does its multiply in its own
+//    tick (see pe_v5.v); the shared adder is a hand-off register and five
+//    one-tick steps (S1a, S1b, S2, S3, S4 in fp32_add_fx.v).
+// Output rows leave 6 ticks later than in version 4: row r appears
+// N + 7 + r ticks after the job's last beat.
 //
 // Rules:
 //  * every job has at least N beats (as before);
-//  * every MX block has at least min(G, N) beats (new). A standard MX block
-//    of 32 numbers is 32 beats, or 16 beats when both sides are FP4, so with
-//    G = 16 standard blocks always qualify. A short final block (K not a
+//  * every MX block has at least max(min(G, N), 6) beats (new): a shared
+//    adder serves its cells one per tick, and a cell's new total takes 6
+//    ticks to come back. A standard MX block of 32 numbers is 32 beats, or 16
+//    beats when both sides are FP4, so standard blocks always qualify. A short final block (K not a
 //    multiple of 32) can be padded with zeros, which changes nothing.
 // The formal proof (formal/fv_systolic_v5.v) shows that under these rules
 // two cells never use the same adder in the same tick.
@@ -36,7 +38,7 @@ module systolic_v5 #(
     output reg  [IW-1:0]     out_row_idx,
     output reg  [N*32-1:0]   out_row
 `ifdef FORMAL
-    , output wire [N+1:0]    f_last_dly,
+    , output wire [N+5:0]    f_last_dly,     // N + LAT bits
     output wire              f_draining,
     output wire [IW-1:0]     f_rd_row,
     output wire [N*N-1:0]    f_req
@@ -46,7 +48,7 @@ module systolic_v5 #(
     localparam GE  = (N < G) ? N : G;           // cells per adder
     localparam NG  = (N + GE - 1) / GE;         // adders per row
     localparam GW  = $clog2(GE) + 1;
-    localparam LAT = 2;                         // extra ticks vs version 4
+    localparam LAT = 6;                         // extra ticks vs version 4
     localparam AW  = 8 + 2 + 8 + 3;
     localparam BW  = 8 + 2 + 8;
 
@@ -142,26 +144,74 @@ module systolic_v5 #(
                             s_e = rq_e[i][c]; s_acc = rq_acc[i][c]; s_who = c - J0;
                         end
                 end
-                // half 1 of the adder, this tick
-                wire               h_inf, h_sr;
-                wire        [82:0] h_R;
-                wire signed [12:0] h_B;
-                fp32_align_add u_a (.acc(s_acc), .x(s_x), .e(s_e),
-                                    .inf(h_inf), .s_r(h_sr), .R(h_R), .B(h_B));
-                // pipeline register between the halves
-                reg               p_v, p_jl, p_inf, p_sr;
-                reg        [82:0] p_R;
-                reg signed [12:0] p_B;
-                reg        [31:0] p_acc;
+                // The shared adder: a hand-off register, then steps S1a, S1b,
+                // S2, S3 and S4 (rtl/fp32_add_fx.v), one tick each. The new
+                // total reaches the cell 5 ticks after the hand-off.
+                reg               q0_v, q0_jl;
+                reg        [47:0] q0_x;
+                reg        [10:0] q0_e;
+                reg        [31:0] q0_acc;
+                reg     [GW-1:0]  q0_who;
+                always @(posedge clk) begin
+                    q0_v <= rst ? 1'b0 : s_v;
+                    q0_jl <= s_jl; q0_x <= s_x; q0_e <= s_e; q0_acc <= s_acc; q0_who <= s_who;
+                end
+                wire               a_inf, a_sa, a_sx;
+                wire        [23:0] a_ma;
+                wire        [47:0] a_mx;
+                wire signed [12:0] a_sha, a_shx, a_B;
+                fp32_s1a_unpack u1a (.acc(q0_acc), .x(q0_x), .e(q0_e), .inf(a_inf), .s_a(a_sa),
+                    .s_x(a_sx), .m_a(a_ma), .m_x(a_mx), .sh_a(a_sha), .sh_x(a_shx), .B(a_B));
+                reg               q1_v, q1_jl, q1_inf, q1_is, q1_sa, q1_sx;
+                reg        [23:0] q1_ma;
+                reg        [47:0] q1_mx;
+                reg signed [12:0] q1_sha, q1_shx, q1_B;
+                reg     [GW-1:0]  q1_who;
+                always @(posedge clk) begin
+                    q1_v <= rst ? 1'b0 : q0_v;
+                    q1_jl <= q0_jl; q1_inf <= a_inf; q1_is <= q0_acc[31]; q1_sa <= a_sa; q1_sx <= a_sx;
+                    q1_ma <= a_ma; q1_mx <= a_mx; q1_sha <= a_sha; q1_shx <= a_shx; q1_B <= a_B;
+                    q1_who <= q0_who;
+                end
+                wire [82:0] b_ala, b_alx;
+                fp32_s1b_align u1b (.m_a(q1_ma), .m_x(q1_mx), .sh_a(q1_sha), .sh_x(q1_shx),
+                                    .al_a(b_ala), .al_x(b_alx));
+                reg               q2_v, q2_jl, q2_inf, q2_is, q2_sa, q2_sx;
+                reg        [82:0] q2_ala, q2_alx;
+                reg signed [12:0] q2_B;
+                reg     [GW-1:0]  q2_who;
+                always @(posedge clk) begin
+                    q2_v <= rst ? 1'b0 : q1_v;
+                    q2_jl <= q1_jl; q2_inf <= q1_inf; q2_is <= q1_is; q2_sa <= q1_sa; q2_sx <= q1_sx;
+                    q2_ala <= b_ala; q2_alx <= b_alx; q2_B <= q1_B; q2_who <= q1_who;
+                end
+                wire        c_sr;
+                wire [82:0] c_R;
+                fp32_s2_add u2 (.s_a(q2_sa), .s_x(q2_sx), .al_a(q2_ala), .al_x(q2_alx), .s_r(c_sr), .R(c_R));
+                reg               q3_v, q3_jl, q3_inf, q3_is, q3_sr;
+                reg        [82:0] q3_R;
+                reg signed [12:0] q3_B;
+                reg     [GW-1:0]  q3_who;
+                always @(posedge clk) begin
+                    q3_v <= rst ? 1'b0 : q2_v;
+                    q3_jl <= q2_jl; q3_inf <= q2_inf; q3_is <= q2_is; q3_sr <= c_sr;
+                    q3_R <= c_R; q3_B <= q2_B; q3_who <= q2_who;
+                end
+                wire signed [7:0]  d_L;
+                wire signed [12:0] d_lsb, d_s;
+                fp32_s3_norm u3 (.R(q3_R), .B(q3_B), .L(d_L), .lsb(d_lsb), .s(d_s));
+                reg               p_v, p_jl, q4_inf, q4_is, q4_sr;
+                reg        [82:0] q4_R;
+                reg signed [7:0]  q4_L;
+                reg signed [12:0] q4_lsb, q4_s;
                 reg     [GW-1:0]  p_who;
                 always @(posedge clk) begin
-                    p_v   <= rst ? 1'b0 : s_v;
-                    p_jl  <= s_jl;  p_inf <= h_inf; p_sr <= h_sr;
-                    p_R   <= h_R;   p_B   <= h_B;   p_acc <= s_acc; p_who <= s_who;
+                    p_v <= rst ? 1'b0 : q3_v;
+                    p_jl <= q3_jl; q4_inf <= q3_inf; q4_is <= q3_is; q4_sr <= q3_sr;
+                    q4_R <= q3_R; q4_L <= d_L; q4_lsb <= d_lsb; q4_s <= d_s; p_who <= q3_who;
                 end
-                // half 2 of the adder, next tick, and the answer back to the cell
-                fp32_round_pack u_r (.inf(p_inf), .acc(p_acc), .s_r(p_sr), .R(p_R), .B(p_B),
-                                     .sum(wb_sum[i][g]));
+                fp32_s4_round u4 (.inf(q4_inf), .inf_sign(q4_is), .s_r(q4_sr), .R(q4_R), .L(q4_L),
+                                  .lsb_in(q4_lsb), .s(q4_s), .sum(wb_sum[i][g]));
                 assign wb_jl[i][g] = p_jl;
                 for (j = J0; j < J1; j = j + 1) begin : back
                     assign wb_v[i][j] = p_v && (p_who == j - J0);

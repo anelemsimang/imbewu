@@ -220,3 +220,25 @@ SRAM is the fast memory on the chip itself. It can deliver one wide word
 per tick. The compiler arranges the numbers in memory so that each word
 holds exactly what the engine needs in that tick; arranging data well is
 as important for speed as the engine itself.
+
+## Standard cells, PDKs and process nodes
+A factory (foundry) publishes a "process design kit" (PDK): the rules and a
+library of ready-made logic gates ("standard cells") with their exact size
+and speed. Turning our design into those gates gives a real area in square
+micrometres and real gate delays. SKY130 is an open 130 nm process (real
+chips are made in it); the 45 nm library is an open teaching library. Data-
+centre AI chips use 3-5 nm processes, whose kits are only available under
+licence from the foundry.
+
+## Clock speed and the "longest path"
+Every tick, signals must travel from one storage register through the
+logic to the next register before the next tick starts. The slowest such
+path sets the fastest clock: a 1.65 ns path allows about 600 MHz. To go
+faster, long paths are cut into shorter steps with registers in between
+("pipelining"), which is what we did to the shared FP32 adder.
+
+## Ripple versus parallel adders
+A simple adder passes the carry from digit to digit, like adding by hand:
+48 digits means 48 steps in a row. A parallel ("Kogge-Stone") adder works
+out all the carries at once in about 6 steps, using more gates. Real chips
+use parallel adders on their critical paths.

@@ -19,97 +19,177 @@
 // larger one; bits of the smaller one that fall below the window are kept
 // as a single "sticky" bit, which is enough for correct rounding because
 // they lie far below the rounding point.
-// ---- Half 1: unpack, line up and add (exact, plus a sticky bit) --------
-module fp32_align_add (
+// The adder is written as four steps (S1-S4) so a chip can give each step
+// its own tick (systolic_v5.v); the one-tick adder simply joins them.
+
+// ---- S1a: unpack both numbers, choose the window -------------------------
+module fp32_s1a_unpack (
     input  wire [31:0]        acc,
     input  wire signed [47:0] x,
     input  wire signed [10:0] e,
     output reg                inf,      // acc is infinite: it stays as it is
-    output reg                s_r,      // sign of the sum
-    output reg  [82:0]        R,        // magnitude of the sum: value = R * 2^B
-    output reg  signed [12:0] B
+    output reg                s_a,
+    output reg                s_x,
+    output reg  [23:0]        m_a,
+    output reg  [47:0]        m_x,
+    output reg  signed [12:0] sh_a,     // shift of each number into the window
+    output reg  signed [12:0] sh_x,
+    output reg  signed [12:0] B         // window bit k means 2^(B + k)
 );
-    localparam signed [12:0] LOW = -13'sd2048;
+    reg signed [12:0] e_a, e_x, d;
+    reg               az, xz, x_top;
+    always @(*) begin
+        inf = (acc[30:23] == 8'hFF);
+        s_a = acc[31];
+        m_a = (acc[30:23] == 8'd0) ? {1'b0, acc[22:0]} : {1'b1, acc[22:0]};
+        e_a = (acc[30:23] == 8'd0) ? -13'sd149 : $signed({5'd0, acc[30:23]}) - 13'sd150;
+        s_x = x[47];
+        m_x = x[47] ? -x : x;
+        e_x = {{2{e[10]}}, e};
+        // The window is lined up on whichever number reaches higher: x spans
+        // 48 bits above 2^e_x, acc 24 bits above 2^e_a. A zero never decides.
+        // (Written with one subtraction, d, so the exponent maths is short.)
+        az = (acc[30:0] == 31'd0);
+        xz = (x == 48'sd0);
+        d  = e_x - e_a;
+        x_top = az || (!xz && (d >= -13'sd24));
+        sh_x = x_top ? 13'sd33 : d + 13'sd57;
+        sh_a = x_top ? 13'sd33 - d : 13'sd57;
+        B    = x_top ? e_x - 13'sd34 : e_a - 13'sd58;
+    end
+endmodule
 
-    reg               s_a, s_x;
-    reg        [23:0] m_a;
-    reg        [47:0] m_x;
-    reg signed [12:0] e_a, e_x, t_a, t_x, t_hi, base;
-    reg        [82:0] al_a, al_x;
-    reg signed [84:0] S;
-
-    // Line up magnitude m (with exponent ee) so that window bit k means
-    // 2^(base - 1 + k); bit 0 is the sticky bit.
+// ---- S1b: line both numbers up in the window -----------------------------
+module fp32_s1b_align (
+    input  wire [23:0]        m_a,
+    input  wire [47:0]        m_x,
+    input  wire signed [12:0] sh_a,
+    input  wire signed [12:0] sh_x,
+    output wire [82:0]        al_a,
+    output wire [82:0]        al_x
+);
+    // window bit 0 is the sticky bit: any bits shifted out below the window
     function [82:0] align;
         input [47:0]        m;
-        input signed [12:0] ee;
-        input signed [12:0] bs;
-        reg signed [12:0] sh;
+        input signed [12:0] sh;
         reg        [47:0] lost;
-        integer           i;
         begin
-            sh = ee - bs;
             if (m == 48'd0) align = 83'd0;
             else if (sh >= 0) align = {35'd0, m} << (sh + 1);
             else if (sh <= -48) align = 83'd1;
             else begin
-                lost = 48'd0;
-                for (i = 0; i < 48; i = i + 1)
-                    if (i < -sh) lost[i] = m[i];
+                // bits shifted out: m AND a mask of the low (-sh) bits
+                lost = m & ~({48{1'b1}} << (-sh));
                 align = ({35'd0, m >> (-sh)} << 1) | {82'd0, |lost};
             end
         end
     endfunction
+    assign al_a = align({24'd0, m_a}, sh_a);
+    assign al_x = align(m_x, sh_x);
+endmodule
 
+// S1 = S1a then S1b (used by the one-tick adder)
+module fp32_s1_align (
+    input  wire [31:0]        acc,
+    input  wire signed [47:0] x,
+    input  wire signed [10:0] e,
+    output wire               inf,
+    output wire               s_a,
+    output wire               s_x,
+    output wire [82:0]        al_a,
+    output wire [82:0]        al_x,
+    output wire signed [12:0] B
+);
+    wire [23:0] m_a; wire [47:0] m_x; wire signed [12:0] sh_a, sh_x;
+    fp32_s1a_unpack ua (.acc(acc), .x(x), .e(e), .inf(inf), .s_a(s_a), .s_x(s_x),
+                        .m_a(m_a), .m_x(m_x), .sh_a(sh_a), .sh_x(sh_x), .B(B));
+    fp32_s1b_align  ub (.m_a(m_a), .m_x(m_x), .sh_a(sh_a), .sh_x(sh_x), .al_a(al_a), .al_x(al_x));
+endmodule
+
+// ---- S2: add or subtract the lined-up magnitudes -------------------------
+module fp32_s2_add (
+    input  wire        s_a,
+    input  wire        s_x,
+    input  wire [82:0] al_a,
+    input  wire [82:0] al_x,
+    output reg         s_r,             // sign of the sum
+    output reg  [82:0] R                // magnitude of the sum: value = R * 2^B
+);
     always @(*) begin
-        inf = (acc[30:23] == 8'hFF);
-        // unpack the FP32 total
-        s_a = acc[31];
-        m_a = (acc[30:23] == 8'd0) ? {1'b0, acc[22:0]} : {1'b1, acc[22:0]};
-        e_a = (acc[30:23] == 8'd0) ? -13'sd149 : $signed({5'd0, acc[30:23]}) - 13'sd150;
-        // unpack the block total
-        s_x = x[47];
-        m_x = x[47] ? -x : x;
-        e_x = {{2{e[10]}}, e};
-        // top of each number (a zero number never decides the window)
-        t_a = (m_a == 24'd0) ? LOW : e_a + 13'sd24;
-        t_x = (m_x == 48'd0) ? LOW : e_x + 13'sd48;
-        t_hi = (t_a > t_x) ? t_a : t_x;
-        base = t_hi - 13'sd81;
-        B    = base - 13'sd1;               // value = R * 2^B
-        al_a = align(m_a, e_a, base);
-        al_x = align(m_x, e_x, base);
-        S    = (s_a ? -$signed({2'b00, al_a}) : $signed({2'b00, al_a})) +
-               (s_x ? -$signed({2'b00, al_x}) : $signed({2'b00, al_x}));
-        s_r  = S[84];
-        R    = s_r ? -S[82:0] : S[82:0];
-
+        if (s_a == s_x) begin
+            R = al_a + al_x;            // cannot overflow: both are below 2^82
+            s_r = s_a;
+        end else if (al_a >= al_x) begin
+            R = al_a - al_x;            // larger minus smaller: no negation needed
+            s_r = s_a;
+        end else begin
+            R = al_x - al_a;
+            s_r = s_x;
+        end
     end
 endmodule
 
-// ---- Half 2: find the leading one, round to nearest even, pack ---------
-module fp32_round_pack (
-    input  wire               inf,
-    input  wire [31:0]        acc,
-    input  wire               s_r,
+// ---- S3: find the leading one and how far to shift -----------------------
+module fp32_s3_norm (
     input  wire [82:0]        R,
     input  wire signed [12:0] B,
+    output reg  signed [7:0]  L,        // position of the highest 1 bit, -1 if none
+    output reg  signed [12:0] lsb,      // exponent of the result's last bit
+    output reg  signed [12:0] s         // right shift that puts it in place
+);
+    // Highest 1 bit: "smear" every 1 downwards, keep only the top one, then
+    // read off its position with fixed OR trees (short, fast circuit)
+    function signed [7:0] lead1;
+        input [82:0] r;
+        reg   [82:0] f, h;
+        integer b, k;
+        reg   [6:0] pos;
+        begin
+            f = r;
+            f = f | (f >> 1);  f = f | (f >> 2);  f = f | (f >> 4);
+            f = f | (f >> 8);  f = f | (f >> 16); f = f | (f >> 32); f = f | (f >> 64);
+            h = f & ~(f >> 1);                     // only the highest 1 remains
+            pos = 7'd0;
+            for (b = 0; b < 7; b = b + 1)
+                for (k = 0; k < 83; k = k + 1)
+                    if ((k >> b) & 1) pos[b] = pos[b] | h[k];
+            lead1 = (r == 83'd0) ? -8'sd1 : {1'b0, pos};
+        end
+    endfunction
+
+    reg signed [12:0] lsb_n, s_n, s_min;
+    reg               clamp;
+    always @(*) begin
+        L     = lead1(R);
+        // normal case: the result's last bit is 23 below its leading one;
+        // but never below 2^-149 (FP32 subnormals). Both options are worked
+        // out side by side and one is picked, to keep the path short.
+        lsb_n = B + L - 13'sd23;
+        s_n   = L - 13'sd23;
+        s_min = -13'sd149 - B;
+        clamp = (s_n < s_min);
+        lsb   = clamp ? -13'sd149 : lsb_n;
+        s     = clamp ? s_min : s_n;
+    end
+endmodule
+
+// ---- S4: shift, round to nearest even, pack -----------------------------
+module fp32_s4_round (
+    input  wire               inf,
+    input  wire               inf_sign,
+    input  wire               s_r,
+    input  wire [82:0]        R,
+    input  wire signed [7:0]  L,
+    input  wire signed [12:0] lsb_in,
+    input  wire signed [12:0] s,
     output reg  [31:0]        sum
 );
-    reg signed [12:0] lsb, s, biased;
+    reg signed [12:0] lsb, biased;
     reg        [82:0] n_wide;
     reg        [24:0] n;
     reg               g, st;
-    integer           L, k;
-
     always @(*) begin
-        // leading one
-        L = -1;
-        for (k = 0; k < 83; k = k + 1) if (R[k]) L = k;
-
-        lsb = B + L - 13'sd23;
-        if (lsb < -13'sd149) lsb = -13'sd149;
-        s = lsb - B;
+        lsb = lsb_in;
         g = 1'b0; st = 1'b0;
         if (s <= 0) n_wide = R << (-s);
         else if (s > 83) begin                  // far below the smallest FP32 step
@@ -118,13 +198,13 @@ module fp32_round_pack (
         end else begin
             n_wide = R >> s;
             g = R[s - 1];
-            for (k = 0; k < 83; k = k + 1) if (k < s - 1 && R[k]) st = 1'b1;
+            st = |(R & ~({83{1'b1}} << (s - 1)));      // any bit below the guard bit
         end
         n = n_wide[24:0] + ((g && (st || n_wide[0])) ? 25'd1 : 25'd0);
         if (n[24]) begin n = n >> 1; lsb = lsb + 13'sd1; end
         biased = lsb + 13'sd150;
 
-        if (inf)                          sum = acc;                       // stays infinite
+        if (inf)                          sum = {inf_sign, 8'hFF, 23'd0};  // stays infinite
         else if (L < 0)                   sum = 32'd0;                     // exact zero: +0
         else if (!n[23])                  sum = {s_r, 8'd0, n[22:0]};      // subnormal (or 0)
         else if (biased >= 13'sd255)      sum = {s_r, 8'hFF, 23'd0};       // overflow
@@ -132,16 +212,21 @@ module fp32_round_pack (
     end
 endmodule
 
-// ---- The whole adder in one tick: the two halves joined ----------------
+// ---- The whole adder in one tick: the four steps joined ------------------
 module fp32_add_fx (
     input  wire [31:0]        acc,
     input  wire signed [47:0] x,
     input  wire signed [10:0] e,
     output wire [31:0]        sum
 );
-    wire               inf, s_r;
-    wire        [82:0] R;
-    wire signed [12:0] B;
-    fp32_align_add  u_a (.acc(acc), .x(x), .e(e), .inf(inf), .s_r(s_r), .R(R), .B(B));
-    fp32_round_pack u_r (.inf(inf), .acc(acc), .s_r(s_r), .R(R), .B(B), .sum(sum));
+    wire               inf, s_a, s_x, s_r;
+    wire        [82:0] al_a, al_x, R;
+    wire signed [12:0] B, lsb, s;
+    wire signed [7:0]  L;
+    fp32_s1_align u1 (.acc(acc), .x(x), .e(e), .inf(inf), .s_a(s_a), .s_x(s_x),
+                      .al_a(al_a), .al_x(al_x), .B(B));
+    fp32_s2_add   u2 (.s_a(s_a), .s_x(s_x), .al_a(al_a), .al_x(al_x), .s_r(s_r), .R(R));
+    fp32_s3_norm  u3 (.R(R), .B(B), .L(L), .lsb(lsb), .s(s));
+    fp32_s4_round u4 (.inf(inf), .inf_sign(acc[31]), .s_r(s_r), .R(R), .L(L),
+                      .lsb_in(lsb), .s(s), .sum(sum));
 endmodule

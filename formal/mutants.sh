@@ -8,13 +8,13 @@ OUT=build/mutants; mkdir -p $OUT
 [ -f build/mul_exh.hex ]  || python3 tools/gen_mul_exhaustive.py build/mul_exh.hex
 [ -f build/fp32_stim.hex ] || python3 tools/fp32_ref.py build/fp32 200000
 mkdir -p build/v4; [ -f build/v4/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v4
-mkdir -p build/v5; [ -f build/v5/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v5 60 4
+mkdir -p build/v5m; [ -f build/v5m/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v5m 60 6
 V5="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v"
 v5sim() {   # 4x4 version 5 tests (adders shared by 4 cells) with one file replaced
     local files=$(echo $V5 | sed "s#$1#$2#")
     iverilog -g2012 -DGRID_N=4 -DV5 -DGROUP=4 -o $OUT/tb5 $files tests/tb_systolic_v4.v || return 1
     for sc in same mixed stress; do
-        vvp -n $OUT/tb5 +PRE=build/v5/v4_N4_$sc | grep -q '^PASS' || return 1
+        vvp -n $OUT/tb5 +PRE=build/v5m/v4_N4_$sc | grep -q '^PASS' || return 1
     done
 }
 V4="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v4.v rtl/systolic_v4.v"
@@ -73,9 +73,9 @@ echo "version 4 engine:"
 M=rtl/mx_mul.v; F=rtl/fp32_add_fx.v; Q=rtl/pe_v4.v
 mutate $M "mixed job: FP4 side reads the wrong half of its lane"  's/2'"'"'d2: dec = dec4(x\[3:0\]);/2'"'"'d2: dec = dec4(x[7:4]);/' mul
 mutate $F "FP32 rounding: ties always rounded up"     's/(g \&\& (st || n_wide\[0\]))/(g)/' fadd
-mutate $F "FP32 rounding: sticky bits ignored"        's/if (k < s - 1 \&\& R\[k\]) st = 1'"'"'b1;/if (k < s - 1 \&\& R[k]) st = 1'"'"'b0;/' fadd
+mutate $F "FP32 rounding: sticky bits ignored"        's/st = |(R \& ~({83{1'"'"'b1}} << (s - 1)));/st = 1'"'"'b0;/' fadd
 mutate $F "FP32 overflow not turned into infinity"    's/biased >= 13'"'"'sd255/biased >= 13'"'"'sd256/' fadd
-mutate $F "FP32 smallest step (subnormals) wrong"     's/if (lsb < -13'"'"'sd149) lsb = -13'"'"'sd149;/if (lsb < -13'"'"'sd148) lsb = -13'"'"'sd148;/' fadd
+mutate $F "FP32 smallest step (subnormals) wrong"     's/s_min = -13'"'"'sd149 - B;/s_min = -13'"'"'sd148 - B;/' fadd
 mutate $Q "MX INT8 factor missing on the B side"      '50s/11'"'"'sd6 : 11'"'"'sd0/11'"'"'sd0 : 11'"'"'sd0/' v4
 mutate $Q "block total not cleared at block end"      '72s/partial <= 48'"'"'sd0;/partial <= x;/' v4
 mutate $Q "FP32 total not cleared between jobs"       '75s/acc <= 32'"'"'d0;/acc <= acc;/' v4
@@ -84,7 +84,8 @@ P5=rtl/pe_v5.v; S5=rtl/systolic_v5.v
 mutate $S5 "shared adder answers the wrong cell"            's/(p_who == j - J0)/(p_who == J1 - 1 - j)/' v5
 mutate $P5 "block total not cleared at block end"            's/if (v_r) partial <= be_r ? 48'"'"'sd0 : x;/if (v_r) partial <= x;/' v5
 mutate $P5 "FP32 total not cleared between jobs"             's/                    acc <= 32'"'"'d0;/                    acc <= wb_sum;/' v5
-mutate $S5 "rows read out one tick too early"                's/localparam LAT = 2;/localparam LAT = 1;/' formal5
+mutate $S5 "rows read out one tick too early"                's/localparam LAT = 6;/localparam LAT = 5;/' formal5
+mutate $F "adder: larger and smaller swapped when subtracting" 's/end else if (al_a >= al_x) begin/end else if (al_a < al_x) begin/' fadd
 mutate $S5 "adder requests not picked from the whole group"  's/for (c = J0; c < J1; c = c + 1)/for (c = J0; c < J1 - 1; c = c + 1)/' v5
 echo "tiling controller:"
 T=rtl/matmul_unit.v
