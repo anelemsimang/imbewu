@@ -608,3 +608,37 @@ weights the engine is already waiting for first fixed that.
 **From version 1 to 3, the decode-style run** (4x4, 15 commands, full
 bandwidth) went from 40% to 84% engine busy and from 10,720 to 5,084
 ticks: 2.1x faster for the same work, with 2.5x fewer memory reads.
+
+## 2026-11-22 - The tile gets its own control processor (RISC-V)
+
+**What it is.** `rtl/tile_soc.v`: tile version 3 plus PicoRV32, an open
+RISC-V processor (ISC licence, unmodified, `rtl/third_party/`), with
+16 KB of RAM and a few control registers. Its driver program
+(`fw/tile_driver.c`, built with the free clang/LLVM compiler) takes a
+short description of the work - number of weight groups, batches per
+group, matrix sizes and formats - and works out every command itself:
+where each input sits in main memory, its size, where the answer goes,
+which weight slot. It writes the commands into the tile, starts it and
+waits for it to finish. The memory layout it assumes is a written
+"driver contract" shared with the software that prepares main memory.
+
+**Checks** (`make test-soc`): 6 runs (engines 4x4, 8x8, 16x16; FP8 x FP4,
+FP8 x FP8, INT8 x INT8, FP4 x FP4, INT8 x FP4; weights reloaded every
+command; all groups sharing one slot). In every run the commands the
+program wrote are identical to the test generator's, and every answer is
+bit exact. 2 planted bugs in the control registers (command words joined
+in the wrong order; status bits swapped so the program stops early) both
+caught.
+
+**Cost of the driver.** The first version packed each command one bit at
+a time and spent 87,000 ticks preparing 15 commands (the tile's work took
+5,084). Packing whole fields at once cut that to about 1,200 ticks (80
+per command); the whole run now takes 6,277 ticks.
+
+**Size.** PicoRV32 at 45 nm: about 26,400 um^2 (7 engine cells' worth,
+under 1% of a 32x32 engine), longest logic path 1.8 ns, similar to the
+engine's. A control core per tile is affordable.
+
+**Next:** start the tile while the driver is still writing commands (hide
+the setup time), the vector unit, and the first step of the software stack
+(W3): turning a PyTorch layer into these commands automatically.

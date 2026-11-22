@@ -54,7 +54,8 @@ design effort (see DECISIONS.md, D-013).
 - [x] Overlap transfer start-up delays (request and answer sides split)
 - [x] Prefetch weights further ahead, independently of activations
       (`rtl/tile_v3.v`): decode-style run 40% -> 84% engine busy since tile v1
-- [ ] A small RISC-V control core per tile (from an open-source design)
+- [x] A small RISC-V control core per tile: PicoRV32 (open source) runs a C
+      driver that builds the command list (`rtl/tile_soc.v`, `fw/`)
 - [ ] Vector unit for the non-matmul parts of AI (activations, softmax, normalisation)
 - [ ] Tile instruction set, documented
 - [ ] Run one real neural-network layer end-to-end in simulation
@@ -142,5 +143,6 @@ Phase 1. Version 5 engine done and is the reference design (D-018): FP32
 block totals inside the cells, mixed formats, shared two-tick adders.
 First physical estimate done (W2, D-019): about 400 MHz logic-only and
 3,580 um^2 per cell at 45 nm. Phase 2: tile version 2 keeps weights in the tile and hides main-memory
-waiting. Tile version 3 fetches weights well ahead. Next: a RISC-V control core, and the
+waiting. Tile version 3 fetches weights well ahead and is run by its own RISC-V
+control core. Next: the
 vector unit; placement and power when tools allow.
