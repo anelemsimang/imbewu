@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -110,6 +110,10 @@ test-tile-v1:
 # Phase 2 tile version 2: weights kept in the tile across commands
 test-tile-v2:
 	tests/run_tile_v2_tests.sh
+
+# Phase 2 tile version 3: weights fetched as early as their slot allows
+test-tile-v3:
+	VER=v3 OUT=build/tilev3 tests/run_tile_v2_tests.sh
 
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)

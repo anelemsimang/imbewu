@@ -17,7 +17,9 @@ module tb_tile_v1;
     reg  mem_rvalid = 0; reg [W8-1:0] mem_rdata = 0;
     wire [31:0] ticks_busy, ticks_engine;
 
-`ifdef TILE_V2
+`ifdef TILE_V3
+    tile_v3 #(.N(N)) dut (
+`elsif TILE_V2
     tile_v2 #(.N(N)) dut (
 `else
     tile_v1 #(.N(N)) dut (
@@ -85,5 +87,5 @@ module tb_tile_v1;
         if (errors == 0 && ticks_engine == meta[3]) $display("PASS"); else $display("FAIL");
         $finish;
     end
-    initial begin #200000000; $display("TIMEOUT"); $display("FAIL"); $finish; end
+    initial begin #5000000; $display("TIMEOUT (tile stuck)"); $display("FAIL"); $finish; end
 endmodule

@@ -1,0 +1,341 @@
+// tile_v3.v - the Imbewu tile, version 3: weights fetched well ahead
+//
+// As tile_v2.v, but a command's weights (B and its scales) are fetched by
+// their own transfer, which may start as soon as the weight slot is free
+// (every earlier command using that slot has been computed), however far
+// ahead that is. Activations (A and its scales) are fetched one command
+// ahead as before. Main-memory layout per command: A, A scales, then (if
+// it brings weights) B, B scales.
+// ---------------------------------------------------------------------------
+// tile_v2.v - the Imbewu tile, version 2: weights stay in the tile
+//
+// Same as tile_v1.v, plus: B (the model's weights) and its scales live in
+// two "weight slots" that are NOT swapped every command. Each command names
+// its slot (b_slot). A command that brings new weights (n_b > 0) loads them
+// into its slot; a command with n_b = 0 reuses what is already there. So a
+// model layer's weights are fetched once and reused by many batches of
+// activations (A), which is how language models are actually run. A slot is
+// only overwritten once every earlier command using it has been computed.
+//
+// Command field added: b_slot = bit 19 (inside the 20 unused bits).
+// ---------------------------------------------------------------------------
+// (Description of version 1 follows.)
+// tile_v1.v - the Imbewu tile, first version (Phase 2; goals G1, G3, G4)
+//
+// Plain language: main memory (HBM) is big but far away: every request takes
+// many ticks to answer, and it delivers a limited amount per tick. The tile
+// hides that wait. It holds a list of matrix multiplies ("commands"). While
+// the engine works on command k from one half of the tile's own memory
+// (SRAM), a data mover fetches command k+1 into the other half, and sends
+// the finished results of command k-1 back to main memory. If fetching is
+// quicker than computing, the engine never waits.
+//
+// Parts: SRAM blocks for A, B, their scales and C, each in two halves;
+// matmul_unit (tiling controller + version 5 engine); a data mover with
+// one main-memory port; a scheduler.
+//
+// Main-memory port (one word of N bytes per request; reads answered in
+// order, any number of ticks later):
+//   mem_req, mem_we, mem_addr, mem_wdata, mem_ready (request accepted)
+//   mem_rvalid, mem_rdata                          (read answers)
+//
+// Command list (written before start): for each command, its inputs lie
+// one after another in main memory from in_addr: A (n_a words), B (n_b),
+// A scales (n_sa), B scales (n_sb), in the layout of matmul_unit.v. Its
+// answer C (n_c words of N x FP32) is written from out_addr, each C word
+// as 4 main-memory words (lowest lanes first).
+module tile_v3 #(
+    parameter N   = 4,
+    parameter G   = 16,
+    parameter SAW = 10,          // SRAM address width per half
+    parameter EAW = 20,          // main-memory address width
+    parameter NCMD = 16
+) (
+    input  wire              clk,
+    input  wire              rst,
+    // command list
+    input  wire              cmd_we,
+    input  wire [3:0]        cmd_idx,
+    input  wire [199:0]      cmd_data,
+    input  wire [4:0]        n_cmds,
+    input  wire              start,
+    output reg               busy,
+    output reg               done,
+    // main memory
+    output reg               mem_req,
+    output reg               mem_we,
+    output reg  [EAW-1:0]    mem_addr,
+    output reg  [N*8-1:0]    mem_wdata,
+    input  wire              mem_ready,
+    input  wire              mem_rvalid,
+    input  wire [N*8-1:0]    mem_rdata,
+    // counters for measurement
+    output reg  [31:0]       ticks_busy,
+    output reg  [31:0]       ticks_engine
+);
+    localparam W8 = N * 8, W32 = N * 32;
+
+    // ---- command list -----------------------------------------------------
+    // fields (from bit 199 down): in_addr 20, n_a 16, n_b 16, n_sa 12, n_sb 12,
+    // out_addr 20, n_c 16, mt 8, nt 8, beats 16, bb 16, nb 16, fa 2, fb 2, unused 20
+    reg [199:0] cmds [0:NCMD-1];
+    always @(posedge clk) if (cmd_we) cmds[cmd_idx] <= cmd_data;
+    function [19:0] f_in;   input [199:0] c; f_in   = c[199:180]; endfunction
+    function [15:0] f_na;   input [199:0] c; f_na   = c[179:164]; endfunction
+    function [15:0] f_nb;   input [199:0] c; f_nb   = c[163:148]; endfunction
+    function [11:0] f_nsa;  input [199:0] c; f_nsa  = c[147:136]; endfunction
+    function [11:0] f_nsb;  input [199:0] c; f_nsb  = c[135:124]; endfunction
+    function [19:0] f_out;  input [199:0] c; f_out  = c[123:104]; endfunction
+    function [15:0] f_nc;   input [199:0] c; f_nc   = c[103:88];  endfunction
+
+    // ---- SRAM (two halves each: the top address bit picks the half) --------
+    wire [SAW-1:0] mm_a_addr, mm_b_addr, mm_sa_addr, mm_sb_addr, mm_c_addr;
+    wire [W8-1:0]  a_rd, b_rd, sa_rd, sb_rd;
+    wire [W32-1:0] c_rd, mm_c_data;
+    wire           mm_c_we;
+    reg            comp_half;                // half the engine is using (A, scales, C)
+    reg            comp_slot;                // weight slot the engine is using (B)
+    reg  [SAW:0]   ld_baddr;                 // write address in the weight slots
+    reg            ld_we_a, ld_we_b, ld_we_sa, ld_we_sb;
+    reg  [SAW:0]   ld_waddr;
+    reg  [W8-1:0]  ld_wdata;
+    reg  [SAW:0]   st_raddr;
+
+    sram_1r1w #(W8, SAW+1) u_a  (clk, {comp_half, mm_a_addr},  a_rd,  ld_we_a,  ld_waddr, ld_wdata);
+    sram_1r1w #(W8, SAW+1) u_b  (clk, {comp_slot, mm_b_addr},  b_rd,  ld_we_b,  ld_baddr, ld_wdata);
+    sram_1r1w #(W8, SAW+1) u_sa (clk, {comp_half, mm_sa_addr}, sa_rd, ld_we_sa, ld_waddr, ld_wdata);
+    sram_1r1w #(W8, SAW+1) u_sb (clk, {comp_slot, mm_sb_addr}, sb_rd, ld_we_sb, ld_baddr, ld_wdata);
+    sram_1r1w #(W32, SAW+1) u_c (clk, st_raddr, c_rd, mm_c_we, {comp_half, mm_c_addr}, mm_c_data);
+
+    // ---- the engine and its tiling controller -----------------------------
+    reg  [199:0] ccmd;                       // command being computed
+    reg          mm_start;
+    wire         mm_busy, mm_done, mm_feed;
+    wire [15:0]  a16, b16, sa16, sb16, c16;
+    matmul_unit #(.N(N), .G(G), .AW(16)) u_mm (
+        .clk(clk), .rst(rst), .start(mm_start),
+        .cfg_mt(ccmd[87:80]), .cfg_nt(ccmd[79:72]), .cfg_beats(ccmd[71:56]),
+        .cfg_bb(ccmd[55:40]), .cfg_nb(ccmd[39:24]), .cfg_fa(ccmd[23:22]), .cfg_fb(ccmd[21:20]),
+        .busy(mm_busy), .done(mm_done), .feed(mm_feed),
+        .a_addr(a16), .a_data(a_rd), .b_addr(b16), .b_data(b_rd),
+        .sa_addr(sa16), .sa_data(sa_rd), .sb_addr(sb16), .sb_data(sb_rd),
+        .c_we(mm_c_we), .c_addr(c16), .c_data(mm_c_data));
+    assign mm_a_addr = a16[SAW-1:0];  assign mm_b_addr = b16[SAW-1:0];
+    assign mm_sa_addr = sa16[SAW-1:0]; assign mm_sb_addr = sb16[SAW-1:0];
+    assign mm_c_addr = c16[SAW-1:0];
+
+    // ---- scheduler state ----------------------------------------------------
+    reg [4:0] nld, ncomp, nst;               // commands loaded / computed / stored
+    reg       computing;
+    // last command (so far loaded) that uses each weight slot
+    reg [4:0] lu [0:1];
+    reg       lu_v [0:1];
+    function f_slot; input [199:0] c; f_slot = c[19]; endfunction
+
+    // ---- data mover ---------------------------------------------------------
+    localparam D_IDLE = 0, D_LOAD = 1, D_ST_RD = 2, D_ST_WAIT = 3, D_ST_CAP = 4, D_ST_SEND = 5;
+    reg [2:0]     dstate;
+    reg [199:0]   dcmd;                      // command being moved
+    reg           dhalf;
+    reg [16:0]    iss, rcv, total;           // load: words requested / received / total
+    reg [16:0]    isb;                       // load: start offset in the command's area
+    reg [15:0]    na, nab, nabs;             // load: region boundaries
+    reg [15:0]    cw;                        // store: C word index
+    reg [1:0]     part;
+    reg [W32-1:0] cbuf;
+
+    // Loads are split in two: the request side sends a command's read
+    // requests and moves on at once; the answer side files the answers
+    // as they arrive, using a small queue that says which command (and
+    // which halves / slot) the next answers belong to. So the memory delay
+    // of one transfer overlaps the next.
+    reg [4:0]  nli;                          // activation loads whose requests are sent
+    reg [4:0]  kw;                           // next command whose weights may be fetched
+    reg [15:0] wready;                       // weights of command k have arrived
+    reg [15:0] q_na [0:3], q_nab [0:3], q_nabs [0:3];
+    reg [16:0] q_tot [0:3];
+    reg        q_half [0:3], q_slot [0:3], q_w [0:3];
+    reg [3:0]  q_cmd [0:3];
+    reg [1:0]  qw, qr;
+    reg  [2:0] qn;                           // transfers waiting for answers
+    wire [199:0] ncmd_ld = cmds[nli[3:0]];
+    wire [199:0] wcmd    = cmds[kw[3:0]];
+    wire wslot = f_slot(wcmd);
+    // a slot may be refilled once no uncomputed earlier command still uses it
+    reg slot_busy;
+    integer j;
+    always @(*) begin
+        slot_busy = 1'b0;
+        for (j = 0; j < NCMD; j = j + 1)
+            if (j < kw && j >= ncomp && f_slot(cmds[j]) == wslot) slot_busy = 1'b1;
+    end
+    wire w_needed  = (kw < n_cmds) && (f_nb(wcmd) != 16'd0);
+    wire can_wload = w_needed && !slot_busy && qn < 3;
+    wire can_load  = (nli < n_cmds) && (nli < ncomp + 2) && qn < 3;
+    // order of the data mover's choices: weights the engine is waiting for
+    // now; activations for the next command; weights needed soon; results
+    // (which free a C half); weights for later
+    wire w_now = can_wload && kw <= ncomp;
+    wire a_go  = can_load && !w_now;
+    wire w_go  = can_wload && (w_now || !can_store || kw <= ncomp + 1);
+    reg  dslot;
+    wire can_store = (nst < ncomp);
+
+    always @(posedge clk) begin
+        ld_we_a <= 1'b0; ld_we_b <= 1'b0; ld_we_sa <= 1'b0; ld_we_sb <= 1'b0;
+        mm_start <= 1'b0;
+        done <= 1'b0;
+        if (rst) begin
+            busy <= 1'b0; dstate <= D_IDLE; mem_req <= 1'b0; mem_we <= 1'b0;
+            nld <= 0; ncomp <= 0; nst <= 0; computing <= 1'b0; comp_half <= 1'b0;
+            nli <= 0; qw <= 0; qr <= 0; qn <= 0; rcv <= 0; kw <= 0; wready <= 0;
+            comp_slot <= 1'b0;
+            ticks_busy <= 0; ticks_engine <= 0;
+        end else begin
+            if (start && !busy) begin
+                busy <= 1'b1; nld <= 0; ncomp <= 0; nst <= 0; computing <= 1'b0;
+                nli <= 0; qw <= 0; qr <= 0; qn <= 0; rcv <= 0; kw <= 0; wready <= 0;
+                ticks_busy <= 0; ticks_engine <= 0;
+            end
+            if (busy) begin
+                ticks_busy <= ticks_busy + 1;
+                if (mm_feed) ticks_engine <= ticks_engine + 1;     // engine fed a beat
+            end
+
+            // compute: next command when its inputs are in, the engine is free,
+            // and its C half has been emptied
+            if (busy && !computing && ncomp < nld && ncomp < nst + 2 && !mm_busy &&
+                (f_nb(cmds[ncomp[3:0]]) == 16'd0 || wready[ncomp[3:0]])) begin
+                ccmd      <= cmds[ncomp[3:0]];
+                comp_half <= ncomp[0];
+                comp_slot <= f_slot(cmds[ncomp[3:0]]);
+                mm_start  <= 1'b1;
+                computing <= 1'b1;
+            end
+            if (computing && mm_done) begin
+                computing <= 1'b0;
+                ncomp     <= ncomp + 1;
+            end
+
+            // answer side: put each answer into the right SRAM
+            if (mem_rvalid) begin
+                ld_wdata <= mem_rdata;
+                if (rcv < q_na[qr]) begin
+                    ld_we_a <= 1'b1; ld_waddr <= {q_half[qr], rcv[SAW-1:0]};
+                end else if (rcv < q_nab[qr]) begin
+                    ld_we_b <= 1'b1; ld_baddr <= {q_slot[qr], rcv[SAW-1:0] - q_na[qr][SAW-1:0]};
+                end else if (rcv < q_nabs[qr]) begin
+                    ld_we_sa <= 1'b1; ld_waddr <= {q_half[qr], rcv[SAW-1:0] - q_nab[qr][SAW-1:0]};
+                end else begin
+                    ld_we_sb <= 1'b1; ld_baddr <= {q_slot[qr], rcv[SAW-1:0] - q_nabs[qr][SAW-1:0]};
+                end
+                if (rcv + 1 == q_tot[qr]) begin
+                    rcv <= 0; qr <= qr + 1;
+                    if (q_w[qr]) wready[q_cmd[qr]] <= 1'b1;
+                    else nld <= nld + 1;
+                end else rcv <= rcv + 1;
+            end
+            // transfers in flight: +1 when one is started, -1 when its last answer arrives
+            qn <= qn + ((dstate == D_IDLE && busy && (a_go || w_go)) ? 3'd1 : 3'd0)
+                     - ((mem_rvalid && rcv + 1 == q_tot[qr]) ? 3'd1 : 3'd0);
+            // skip commands that bring no weights
+            if (kw < n_cmds && f_nb(wcmd) == 16'd0) kw <= kw + 1;
+
+            // data mover (request side)
+            case (dstate)
+            D_IDLE: begin
+                mem_req <= 1'b0; mem_we <= 1'b0;
+                if (busy && a_go) begin               // activations, one command ahead
+                    dcmd  <= ncmd_ld;
+                    total <= f_na(ncmd_ld) + f_nsa(ncmd_ld);
+                    q_na[qw]   <= f_na(ncmd_ld);
+                    q_nab[qw]  <= f_na(ncmd_ld);           // no B in this transfer
+                    q_nabs[qw] <= f_na(ncmd_ld) + f_nsa(ncmd_ld);
+                    q_tot[qw]  <= f_na(ncmd_ld) + f_nsa(ncmd_ld);
+                    q_half[qw] <= nli[0];
+                    q_slot[qw] <= 1'b0;
+                    q_w[qw]    <= 1'b0;
+                    q_cmd[qw]  <= nli[3:0];
+                    qw  <= qw + 1;
+                    nli <= nli + 1;
+                    iss <= 0; isb <= 0;
+                    dstate <= D_LOAD;
+                end else if (busy && w_go) begin       // weights, as early as the slot allows
+                    dcmd  <= wcmd;
+                    total <= f_nb(wcmd) + f_nsb(wcmd);
+                    q_na[qw]   <= 16'd0;
+                    q_nab[qw]  <= f_nb(wcmd);
+                    q_nabs[qw] <= f_nb(wcmd);              // no A scales in this transfer
+                    q_tot[qw]  <= f_nb(wcmd) + f_nsb(wcmd);
+                    q_half[qw] <= 1'b0;
+                    q_slot[qw] <= wslot;
+                    q_w[qw]    <= 1'b1;
+                    q_cmd[qw]  <= kw[3:0];
+                    qw  <= qw + 1;
+                    kw  <= kw + 1;
+                    iss <= 0; isb <= f_na(wcmd) + f_nsa(wcmd);   // weights follow A and its scales
+                    dstate <= D_LOAD;
+                end else if (busy && can_store) begin
+                    dcmd  <= cmds[nst[3:0]];
+                    dhalf <= nst[0];
+                    cw    <= 0;
+                    dstate <= D_ST_RD;
+                end else if (busy && nst == n_cmds) begin
+                    busy <= 1'b0; done <= 1'b1;
+                end
+            end
+            D_LOAD: begin
+                // ask for the next word whenever main memory accepts one,
+                // then move on without waiting for the answers
+                if (mem_req && mem_ready) iss <= iss + 1;
+                mem_req  <= (iss + (mem_req && mem_ready) < total);
+                mem_we   <= 1'b0;
+                mem_addr <= f_in(dcmd) + isb + iss + (mem_req && mem_ready);
+                if (iss + (mem_req && mem_ready) == total) begin
+                    mem_req <= 1'b0;
+                    dstate  <= D_IDLE;
+                end
+            end
+            D_ST_RD: begin                       // ask SRAM for one C word
+                mem_req  <= 1'b0;
+                st_raddr <= {dhalf, cw[SAW-1:0]};
+                dstate   <= D_ST_WAIT;
+            end
+            D_ST_WAIT: dstate <= D_ST_CAP;       // SRAM answers one tick later
+            D_ST_CAP: begin                      // keep the word, send quarter 0
+                cbuf      <= c_rd;
+                part      <= 2'd0;
+                mem_req   <= 1'b1;
+                mem_we    <= 1'b1;
+                mem_addr  <= f_out(dcmd) + {cw, 2'b00};
+                mem_wdata <= c_rd[W8-1:0];
+                dstate    <= D_ST_SEND;
+            end
+            D_ST_SEND: begin                     // send quarters 1-3 as each is accepted
+                if (mem_ready) begin
+                    if (part == 2'd1)            // meanwhile, fetch the next C word
+                        st_raddr <= {dhalf, cw[SAW-1:0] + 1'b1};
+                    if (part == 2'd3) begin
+                        cw <= cw + 1;
+                        if (cw + 1 == f_nc(dcmd)) begin
+                            mem_req <= 1'b0; mem_we <= 1'b0;
+                            nst <= nst + 1;
+                            dstate <= D_IDLE;
+                        end else begin           // next word is already here: no gap
+                            cbuf      <= c_rd;
+                            part      <= 2'd0;
+                            mem_addr  <= f_out(dcmd) + {cw + 1'b1, 2'b00};
+                            mem_wdata <= c_rd[W8-1:0];
+                        end
+                    end else begin
+                        part      <= part + 1;
+                        mem_addr  <= f_out(dcmd) + {cw, 2'b00} + part + 1;
+                        mem_wdata <= cbuf >> (W8 * (part + 1));
+                    end
+                end
+            end
+            default: dstate <= D_IDLE;
+            endcase
+        end
+    end
+endmodule

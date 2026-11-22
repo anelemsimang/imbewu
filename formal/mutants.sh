@@ -52,6 +52,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         rm -rf $OUT/tilev1; OUT=$OUT/tilev1 TILE=$m tests/run_tile_v1_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = tilev2 ]; then
         rm -rf $OUT/tilev2; OUT=$OUT/tilev2 TILE=$m tests/run_tile_v2_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = tilev3 ]; then
+        rm -rf $OUT/tilev3; VER=v3 OUT=$OUT/tilev3 TILE_V3=$m tests/run_tile_v2_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalmm ]; then
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -108,5 +110,11 @@ mutate $T2 "weights overwritten while an earlier command still needs them" 's/||
 mutate $T2 "engine reads the other weight slot"                 's/comp_slot <= f_slot(cmds\[ncomp\[3:0\]\]);/comp_slot <= ~f_slot(cmds[ncomp[3:0]]);/' tilev2
 mutate $T2 "weights written into the activation half"           's/ld_we_b <= 1'"'"'b1; ld_baddr <= {q_slot\[qr\],/ld_we_b <= 1'"'"'b1; ld_baddr <= {q_half[qr],/' tilev2
 mutate $T2 "answers filed under the wrong command"              's/rcv <= 0; qr <= qr + 1; nld <= nld + 1;/rcv <= 0; nld <= nld + 1;/' tilev2
+echo "tile version 3 (weights fetched ahead):"
+T3=rtl/tile_v3.v
+mutate $T3 "weight slot refilled while still in use"   's/if (j < kw \&\& j >= ncomp \&\& f_slot(cmds\[j\]) == wslot) slot_busy = 1'"'"'b1;/if (j < kw \&\& j >= ncomp \&\& f_slot(cmds[j]) == wslot) slot_busy = 1'"'"'b0;/' tilev3
+mutate $T3 "engine starts before its weights arrive"    's/(f_nb(cmds\[ncomp\[3:0\]\]) == 16'"'"'d0 || wready\[ncomp\[3:0\]\])) begin/1'"'"'b1) begin/' tilev3
+mutate $T3 "weights read from the wrong place"          's/iss <= 0; isb <= f_na(wcmd) + f_nsa(wcmd);/iss <= 0; isb <= f_na(wcmd);/' tilev3
+mutate $T3 "weights marked as arrived for the wrong command" 's/if (q_w\[qr\]) wready\[q_cmd\[qr\]\] <= 1'"'"'b1;/if (q_w[qr]) wready[q_cmd[qr] + 1] <= 1'"'"'b1;/' tilev3
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

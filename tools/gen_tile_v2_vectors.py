@@ -10,6 +10,8 @@ Usage: python3 tools/gen_tile_v2_vectors.py N GROUPS PER_GROUP OUT_PREFIX [SEED]
   SLOTS "alt" (default): groups alternate between the two weight slots
   SLOTS "one": every group uses slot 0, so new weights must wait for the
                previous group to finish (tests the slot safety rule)
+  LAYOUT (9th argument) "v2" (default): A, B, A scales, B scales
+         "v3": A, A scales, B, B scales (tile_v3 fetches weights separately)
   SHAPE "decode" (default): A = 1 tile of rows (few tokens), B = 3 tiles, K = 96
   SHAPE "mixed": random shapes and formats per group
 Files as for gen_tile_v1_vectors.py.
@@ -30,6 +32,7 @@ def main():
     reload_all = len(sys.argv) > 6 and sys.argv[6] == "1"
     shape = sys.argv[7] if len(sys.argv) > 7 else "decode"
     slots = sys.argv[8] if len(sys.argv) > 8 else "alt"
+    layout = sys.argv[9] if len(sys.argv) > 9 else "v2"
     mem, cmds, exp = [], [], []
     out_ptr = 1 << 18
     total_beats = 0
@@ -48,12 +51,15 @@ def main():
             load_b = reload_all or k == 0
             assert max(len(r["a"]), len(r["b"]), len(r["c"])) <= HALF
             in_addr = len(mem)
-            mem.extend(r["a"])
-            if load_b:
-                mem.extend(r["b"])
-            mem.extend(r["sa"])
-            if load_b:
-                mem.extend(r["sb"])
+            if layout == "v3":
+                mem.extend(r["a"] + r["sa"] + (r["b"] + r["sb"] if load_b else []))
+            else:
+                mem.extend(r["a"])
+                if load_b:
+                    mem.extend(r["b"])
+                mem.extend(r["sa"])
+                if load_b:
+                    mem.extend(r["sb"])
             nb_w = len(r["b"]) if load_b else 0
             nsb_w = len(r["sb"]) if load_b else 0
             cmds.append(pack([(in_addr, 20), (len(r["a"]), 16), (nb_w, 16),

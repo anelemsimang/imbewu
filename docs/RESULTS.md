@@ -570,3 +570,41 @@ What still costs time: new weights can only be fetched one command
 ahead (they share the scheduler's look-ahead with the activations), so
 the first command of each group waits for its weights. Next step:
 prefetch weights further ahead, independently of activations.
+
+## 2026-11-22 - Tile version 3: weights fetched well ahead
+
+**What changed.** `rtl/tile_v3.v`: a command's weights are fetched by
+their own transfer, which starts as soon as the weight slot is free
+(worked out from the command list: no uncomputed earlier command uses
+that slot), however far ahead that is. Activations are still fetched one
+command ahead. The data mover's order of choice: weights the engine is
+waiting for now; the next activations; weights needed soon; results going
+back; weights for later. (Main-memory layout per command: A, A scales,
+then B, B scales.)
+
+**Checks** (`make test-tile-v3`): the same 9 runs as version 2, all bit
+exact. 4 planted bugs (slot refilled while in use, engine starting before
+its weights arrive, weights read from the wrong place, weights marked as
+arrived for the wrong command) all caught. The last one makes the tile
+wait forever; the test's time limit was cut from 20 million to 500,000
+ticks so that a stuck tile is reported within about two minutes.
+
+**Engine busy, versions 2 and 3** (same work, same memory model):
+
+| Run | v2 | v3 |
+|---|---|---|
+| Decode, 4x4, full bandwidth | 77% | **84%** |
+| Decode, 4x4, half bandwidth | 60% | 62% |
+| Mixed shapes, 4x4 | 72% | 77% |
+| Mixed shapes, 8x8 | 64% | 67% |
+| Decode, 16x16 | 63% | 70% |
+| Decode, one shared slot | 54% | 58% |
+| Mixed, one shared slot, 1/3 bandwidth | 40% | 40% |
+
+Along the way, the first version of the choice order made the
+single-slot cases slower than version 2 (35% and 53%). Putting the
+weights the engine is already waiting for first fixed that.
+
+**From version 1 to 3, the decode-style run** (4x4, 15 commands, full
+bandwidth) went from 40% to 84% engine busy and from 10,720 to 5,084
+ticks: 2.1x faster for the same work, with 2.5x fewer memory reads.
