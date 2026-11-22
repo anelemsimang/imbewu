@@ -38,13 +38,16 @@ def main():
     total_beats = 0
     for g in range(groups):
         if shape == "decode":
-            NT, KB, fa, fb = 3, 3, 1, 2
+            # sizes can be changed with environment settings, to match the
+            # RISC-V driver's compile-time settings (fw/tile_driver.c)
+            NT, KB = int(os.environ.get("DEC_NT", 3)), int(os.environ.get("DEC_KB", 3))
+            fa, fb = int(os.environ.get("DEC_FA", 1)), int(os.environ.get("DEC_FB", 2))
         else:
             fa, fb = random.choice([(1, 1), (0, 0), (2, 2), (1, 2), (0, 2)])
             NT, KB = random.randrange(1, 4), random.randrange(1, 4)
         raw = None
         for k in range(per):
-            MT = 1 if shape == "decode" else random.randrange(1, 4)
+            MT = int(os.environ.get("DEC_MT", 1)) if shape == "decode" else random.randrange(1, 4)
             r = build(N, MT, NT, KB, fa, fb, raw)
             raw = r["raw"]
             c = r["cfg"]

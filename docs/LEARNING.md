@@ -254,3 +254,17 @@ How many calculations each number fetched from memory feeds. Big matrix
 multiplies reuse every number many times (high intensity), so compute is
 the limit; small ones barely reuse anything (low intensity), so memory is
 the limit, however fast the engine.
+
+## Control processor and driver
+The tile's engine and data mover only follow orders. A small general-
+purpose processor (here PicoRV32, an open RISC-V design) runs a "driver"
+program that turns a short description of the work ("3 layers, 5 batches
+each, these sizes") into the exact list of orders: where every input sits
+in memory, how big it is, where the answer goes. Data-centre chips work
+the same way: tiny processors next to the engines, so the host computer
+only hands out the work.
+
+## RISC-V
+An open, royalty-free instruction set: the "language" a processor
+understands. Anyone may build a RISC-V processor without a licence fee,
+which is why it suits a new chip company and national sovereignty goals.

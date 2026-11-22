@@ -54,6 +54,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         rm -rf $OUT/tilev2; OUT=$OUT/tilev2 TILE=$m tests/run_tile_v2_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = tilev3 ]; then
         rm -rf $OUT/tilev3; VER=v3 OUT=$OUT/tilev3 TILE_V3=$m tests/run_tile_v2_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = soc ]; then
+        rm -rf $OUT/soc; OUT=$OUT/soc SOC=$m tests/run_soc_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalmm ]; then
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -116,5 +118,9 @@ mutate $T3 "weight slot refilled while still in use"   's/if (j < kw \&\& j >= n
 mutate $T3 "engine starts before its weights arrive"    's/(f_nb(cmds\[ncomp\[3:0\]\]) == 16'"'"'d0 || wready\[ncomp\[3:0\]\])) begin/1'"'"'b1) begin/' tilev3
 mutate $T3 "weights read from the wrong place"          's/iss <= 0; isb <= f_na(wcmd) + f_nsa(wcmd);/iss <= 0; isb <= f_na(wcmd);/' tilev3
 mutate $T3 "weights marked as arrived for the wrong command" 's/if (q_w\[qr\]) wready\[q_cmd\[qr\]\] <= 1'"'"'b1;/if (q_w[qr]) wready[q_cmd[qr] + 1] <= 1'"'"'b1;/' tilev3
+echo "tile + RISC-V core:"
+SC=rtl/tile_soc.v
+mutate $SC "command words joined in the wrong order"    's/cmdw\[3\], cmdw\[2\], cmdw\[1\], cmdw\[0\]}/cmdw[3], cmdw[1], cmdw[2], cmdw[0]}/' soc
+mutate $SC "status bits swapped (program stops early)"  's/8'"'"'h2C: cpu_rdata <= {30'"'"'d0, done_seen, t_busy};/8'"'"'h2C: cpu_rdata <= {30'"'"'d0, t_busy, done_seen};/' soc
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]
