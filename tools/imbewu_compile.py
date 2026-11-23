@@ -236,7 +236,9 @@ def main():
     ids = tok(text, return_tensors="pt").input_ids[:, :tokens]
     layer = model.model.layers[layer_i].mlp.gate_proj
     got = {}
-    h = layer.register_forward_hook(lambda m, i, o: got.setdefault("x", i[0].detach()))
+    def hook(module, inputs, output):      # record the input; return nothing, change nothing
+        got.setdefault("x", inputs[0].detach())
+    h = layer.register_forward_hook(hook)
     with torch.no_grad():
         model(ids)
     h.remove()
