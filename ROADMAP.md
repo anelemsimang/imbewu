@@ -33,7 +33,7 @@ design effort (see DECISIONS.md, D-013).
       same answers as version 4, 4x4 grid 54% smaller, proven never to
       double-book an adder (D-018)
 - [ ] Precision v2 rest: 4x FP4 packing, FP8 E5M2, NaN handling
-- [ ] BF16 for training
+- [ ] BF16 input mode, first for attention scores Q x K^T (D-021), then training
 - [x] Real model numbers on the chip: Qwen2.5-0.5B activations and weights run
       through the 16x16 engine in simulation; output matches software exactly
       (`tools/real_model_on_chip.py`, `results/`)
@@ -106,8 +106,11 @@ deliberately planted bugs, real model data.
       tile -> PyTorch tensor, bit exact; real Qwen layer run
       (`tools/imbewu_compile.py`, `make test-compile`)
 - [ ] Build on open compiler frameworks (MLIR / IREE or TVM), not from scratch
-- [ ] Goal for the pitch: a real (small) language model running end to end
-      on the simulated Imbewu design
+- [x] A real language model (Qwen2.5-0.5B) end to end on Imbewu's exact
+      arithmetic (`tools/imbewu_numerics.py`): FP8 +13% perplexity, +6% with
+      BF16 attention scores (D-021)
+- [ ] Goal for the pitch: the same model end to end on the simulated tile
+      itself (needs a much faster simulator, e.g. Verilator)
 
 ### W4 - Performance model early (limitation 1: specification)
 - [x] First analytical performance model now, not at the end: given a design
@@ -161,5 +164,8 @@ FP4 weights are now packed two per byte (D-020): half the memory reads and
 
 The vector unit (version 1) runs softmax, RMSNorm and SiLU.
 
-Next: connect the vector unit to the tile, then a whole transformer block
-running through the compiler.
+A whole language model has run on Imbewu's exact arithmetic; it showed
+attention scores need BF16 (D-021).
+
+Next: the BF16 mode for attention scores, then connect the vector unit to
+the tile.

@@ -284,3 +284,17 @@ Hardware for exp() or division is large. Instead, exp(x) is written as
 and 2^(fraction) a short polynomial (7 multiply-adds). 1/x starts from a
 rough guess (a famous bit trick) and is improved three times with
 Newton's method, each step doubling the number of correct digits.
+
+## Attention, in one paragraph
+For every word, the model asks "which earlier words matter for me?". Each
+word has a query (Q) and a key (K); multiplying Q by K for every pair gives
+a score; softmax turns the scores into weights that add up to 1; the
+weights then mix the words' values (V). Our tests showed the scoring step
+(Q x K) is the delicate one: it needs 16-bit numbers, while the mixing step
+is fine with 8-bit ones.
+
+## Perplexity of a whole model "on the chip"
+Simulating every gate of the chip for a whole model would take days, so we
+copy the chip's arithmetic exactly in fast software, after checking the
+copy against the hardware. That lets us run a real language model end to
+end "as the chip would" and see how good its answers still are.

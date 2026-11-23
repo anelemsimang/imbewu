@@ -16,13 +16,13 @@
       "reused": true
     },
     {
-      "config": "Imbewu, FP8 activations x FP8 weights",
+      "config": "Imbewu, FP8 activations x FP4 weights",
       "attention": "qk-bf16",
       "output_layer": "mxfp8",
-      "perplexity": 19.167,
+      "perplexity": 24.077,
       "tokens": 4088,
-      "seconds": 838,
-      "change_pct": 6.42
+      "seconds": 791,
+      "change_pct": 33.68
     }
   ]
 }

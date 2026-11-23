@@ -142,3 +142,13 @@ traffic as FP8, so the decode speed-up FP4 weights promise is not yet
 real. The engine and data layout will carry two FP4 weights per lane in
 mixed jobs (the activation side then supplies two FP8 numbers per beat),
 before any FP4 speed claim is made in pitch material.
+
+### D-021 - Attention scores (Q x K^T) get a BF16 path
+Running a whole model on Imbewu's arithmetic (docs/RESULTS.md, 2026-11-23)
+showed that 8-bit MX blocks are fine for the linear layers, the output
+layer and probabilities x V, but not for Q x K^T: it alone took the loss
+from about +6% to +13% (INT8 no better, so the cause is the shared block
+scale). With Q x K^T in BF16 the loss returns to +6.4%. The engine will get
+a BF16 input mode (FP32 sums) for attention scores, next on the hardware
+list, ahead of other precision extras. Pitch material quotes the
+BF16-attention configuration and states this requirement.

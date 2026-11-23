@@ -749,3 +749,58 @@ step, and several instructions per tick.
 
 **Not done yet:** connecting it to the tile (reading the engine's result
 rows directly), and its size (measurement running).
+
+## 2026-11-23 - A whole language model on Imbewu's arithmetic
+
+**What was done.** Gate-level simulation is far too slow for a whole
+model, so `tools/imbewu_numerics.py` does the chip's exact arithmetic with
+PyTorch: MX rounding, exact sums inside each block of 32 and one FP32
+rounding per block for every matrix multiply; and the vector unit's own
+instruction sequences for softmax, RMSNorm and SiLU. Its self-check ties it
+to the bit-exact references: 60 of 60 vector rows identical to the vector
+unit's emulator (which the hardware matches bit for bit), and 0 of 192
+matrix results different from exact single rounding.
+
+Qwen2.5-0.5B then ran end to end on this arithmetic: every linear layer,
+both attention products, softmax, every RMSNorm, SiLU and the output layer.
+Perplexity on WikiText-2 (8 windows of 512 tokens, 4,088 tokens scored;
+lower is better):
+
+| Configuration | Perplexity | Change vs FP32 |
+|---|---|---|
+| FP32 (reference) | 18.01 | - |
+| Imbewu, FP8 x FP8, everything on chip arithmetic | 20.38 | +13.1% |
+| Imbewu, FP8 activations x FP4 weights, everything | 26.29 | +46.0% |
+
+**Where the loss comes from** (FP8 weights; one part changed at a time):
+
+| What is on chip arithmetic | Perplexity | Change |
+|---|---|---|
+| Linear layers, softmax, RMSNorm, SiLU (attention products and output layer in FP32) | 18.73 | +4.0% |
+| ... + output layer in FP8 | 19.00 | +5.5% |
+| ... + attention, probabilities x V in FP8 (Q x K^T in FP32) | 19.14 | +6.2% |
+| ... + attention, Q x K^T in FP8 (probabilities x V in FP32) | 20.27 | +12.6% |
+| Everything (both attention products in FP8) | 20.38 | +13.1% |
+| Everything, attention products in MX INT8 instead | 20.20 | +12.1% |
+| **Everything, Q x K^T in BF16 (approximate model), rest FP8** | **19.17** | **+6.4%** |
+
+So: (1) the vector unit's softmax, RMSNorm and SiLU cost nothing
+measurable (the +4.0% row matches the earlier linear-layers-only accuracy
+check); (2) almost all the extra loss is **Q x K^T** (the step that scores
+how much each word attends to each other word) in 8-bit MX blocks; INT8
+does not help, so it is the shared block scale, not the 8-bit format: a few
+very large channels in Q and K (a known effect of the rotary position code)
+set the scale and smaller ones are rounded away; (3) computing Q x K^T in
+BF16 recovers almost all of it (+6.4% vs +6.2% for full FP32).
+
+With FP4 weights and Q x K^T in BF16: 24.08 (+33.7%, down from +46.0%).
+The rest of that loss is FP4 weights on a small model, as the earlier
+accuracy check found; larger models lose much less.
+
+**Decision D-021:** add a BF16 mode to the engine for Q x K^T. (The BF16
+row above uses a software approximation: BF16 inputs, FP32 sums; the
+engine's exact BF16 arithmetic is still to be designed.)
+
+**Limits.** One model (0.5B), 4,088 tokens (the FP32 reference was computed
+once and reused); the matrix model rounds via float64, which can in rare
+cases round twice (0 of 192 cases in the check).
