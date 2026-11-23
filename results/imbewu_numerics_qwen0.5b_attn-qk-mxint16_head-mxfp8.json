@@ -1,0 +1,28 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "dataset": "wikitext-2-raw-v1 test",
+  "seq": 512,
+  "windows": 8,
+  "self_check": {
+    "softmax_rows_identical_to_emulator": "20/20",
+    "rmsnorm_rows_identical_to_emulator": "20/20",
+    "silu_rows_identical_to_emulator": "20/20",
+    "matmul_results_differing_from_exact_rounding": "0/192"
+  },
+  "results": [
+    {
+      "config": "FP32 (reference)",
+      "perplexity": 18.011,
+      "reused": true
+    },
+    {
+      "config": "Imbewu, FP8 activations x FP8 weights",
+      "attention": "qk-mxint16",
+      "output_layer": "mxfp8",
+      "perplexity": 19.137,
+      "tokens": 4088,
+      "seconds": 1026,
+      "change_pct": 6.25
+    }
+  ]
+}
