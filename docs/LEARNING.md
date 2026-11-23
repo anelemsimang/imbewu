@@ -268,3 +268,19 @@ only hands out the work.
 An open, royalty-free instruction set: the "language" a processor
 understands. Anyone may build a RISC-V processor without a licence fee,
 which is why it suits a new chip company and national sovereignty goals.
+
+## The vector unit and softmax
+Not everything in a language model is a matrix multiply. Softmax turns a
+row of scores into probabilities that add up to 1 (used in attention);
+normalisation (RMSNorm) rescales each row so numbers stay in a sensible
+range; SiLU is the "activation" that lets the model represent curved,
+non-linear patterns. These work on rows of numbers one element at a time,
+so they run on a vector unit: a row of simple FP32 calculators side by
+side, one per engine column.
+
+## Building exp and 1/x from add and multiply
+Hardware for exp() or division is large. Instead, exp(x) is written as
+2^(whole part) x 2^(fraction), where 2^(whole part) is just an exponent
+and 2^(fraction) a short polynomial (7 multiply-adds). 1/x starts from a
+rough guess (a famous bit trick) and is improved three times with
+Newton's method, each step doubling the number of correct digits.

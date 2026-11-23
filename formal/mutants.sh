@@ -58,6 +58,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         rm -rf $OUT/soc; OUT=$OUT/soc SOC=$m tests/run_soc_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = compile ]; then
         rm -rf build/compile/test_*; IMBEWU_MATMUL=$PWD/$m python3 tests/run_compile_tests.py > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = vu ]; then
+        IMBEWU_VU=$PWD/$m python3 tests/run_vu_tests.py > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalmm ]; then
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -127,5 +129,11 @@ mutate $SC "status bits swapped (program stops early)"  's/8'"'"'h2C: cpu_rdata 
 echo "FP4 packed two per lane (D-020):"
 mutate $T "packed FP4: high and low halves swapped"       's/t_ph <= (pk_a || pk_b) \&\& beat\[0\];/t_ph <= (pk_a || pk_b) \&\& !beat[0];/' compile
 mutate $T "packed FP4: words not reused for two beats"    's/assign b_addr  = pk_b ? nt \* half_beats + (beat >> 1)/assign b_addr  = pk_b ? nt * half_beats + beat/' compile
+echo "vector unit:"
+VU=rtl/vu_v1.v
+mutate $VU "floor of negative numbers not rounded down"  's/assign r_floor\[l\*32 +: 32\] = (a\[31\] \&\& frac) ? tr_m1 : tr;/assign r_floor[l*32 +: 32] = tr;/' vu
+mutate $VU "2^n off by a factor of two"                  's/wire \[9:0\] be = nc + 10'"'"'sd127;/wire [9:0] be = nc + 10'"'"'sd126;/' vu
+mutate $VU "MAX returns the smaller number"              's/assign r_max\[l\*32 +: 32\] = a_lt_b ? b : a;/assign r_max[l*32 +: 32] = a_lt_b ? a : b;/' vu
+mutate $VU "lane sum leaves out half the lanes"          's/6'"'"'d8: vr\[vd\] <= {L{st\[LV\]\[0\]}};/6'"'"'d8: vr[vd] <= {L{st[LV-1][0]}};/' vu
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

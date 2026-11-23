@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -123,6 +123,16 @@ test-soc:
 # Software stack, first step (W3): PyTorch layers compiled onto the tile
 test-compile:
 	python3 tests/run_compile_tests.py
+
+# Vector unit: FP32 add and multiply vs NumPy, then softmax / RMSNorm / SiLU
+test-fp32ops:
+	@mkdir -p $(BUILD)
+	python3 tools/gen_fp32_ops_vectors.py $(BUILD)/fp32ops 50000
+	iverilog -g2012 -o $(BUILD)/tb_fp32ops rtl/fp32_add_fx.v rtl/fp32_ops.v tests/tb_fp32_ops.v
+	vvp -n $(BUILD)/tb_fp32ops +PRE=$(BUILD)/fp32ops +COUNT=50000
+
+test-vu:
+	python3 tests/run_vu_tests.py
 
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)
