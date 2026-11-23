@@ -231,6 +231,13 @@ def make_attention(fmt="mxfp8"):
         v = repeat_kv(value, module.num_key_value_groups)
         # Q x K^T on the engine (both sides activations)
         B, H, T, D = query.shape
+        if fmt is None:                            # attention products kept in FP32
+            s = torch.matmul(query.float(), k.float().transpose(2, 3)) * f32(scaling)
+            if attention_mask is not None:
+                s = s + attention_mask.float()
+            p = vu_softmax(s)
+            o = torch.matmul(p, v.float())
+            return o.transpose(1, 2).contiguous(), None
         s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
                        fmt, fmt).reshape(B, H, T, -1)
         s = s * f32(scaling)
@@ -244,8 +251,10 @@ def make_attention(fmt="mxfp8"):
     return attention
 
 
-def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8"):
-    """Put a Qwen2 model on Imbewu arithmetic (in place)."""
+def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8", attn="mxfp8"):
+    """Put a Qwen2 model on Imbewu arithmetic (in place). head_fmt=None keeps
+    the output layer in FP32; attn="fp32" keeps the attention products (but
+    not softmax) in FP32 - used to find which part costs accuracy."""
     from transformers.models.qwen2 import modeling_qwen2 as m
     for layer in model.model.layers:
         for name in ("q_proj", "k_proj", "v_proj", "o_proj"):
@@ -256,8 +265,9 @@ def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8"):
         layer.input_layernorm = ImbewuRMSNorm(layer.input_layernorm)
         layer.post_attention_layernorm = ImbewuRMSNorm(layer.post_attention_layernorm)
     model.model.norm = ImbewuRMSNorm(model.model.norm)
-    model.lm_head = ImbewuLinear(model.lm_head, a_fmt, head_fmt)
-    m.eager_attention_forward = make_attention(a_fmt)
+    if head_fmt:
+        model.lm_head = ImbewuLinear(model.lm_head, a_fmt, head_fmt)
+    m.eager_attention_forward = make_attention(a_fmt if attn != "fp32" else None)
     return model
 
 
@@ -323,6 +333,8 @@ def main():
     ap.add_argument("--skip-ref", type=float, default=None,
                     help="reuse a known FP32 perplexity instead of recomputing it")
     ap.add_argument("--configs", default="ref,fp8,fp4")
+    ap.add_argument("--attn", default="mxfp8", help="mxfp8 or fp32 (attention products)")
+    ap.add_argument("--head", default="mxfp8", help="mxfp8 or none (output layer)")
     args = ap.parse_args()
     torch.set_num_threads(max(1, os.cpu_count() or 1))
     chk = self_check()
@@ -344,9 +356,10 @@ def main():
         model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.float32,
                                                      attn_implementation="eager").eval()
         if wf:
-            to_imbewu(model, w_fmt=wf)
+            to_imbewu(model, w_fmt=wf, attn=args.attn, head_fmt=None if args.head == "none" else args.head)
         ppl, ntok = perplexity(model, ids, args.seq, args.windows)
-        r = dict(config=label, perplexity=round(ppl, 3), tokens=ntok, seconds=round(time.time() - t0))
+        r = dict(config=label, attention=args.attn, output_layer=args.head,
+                 perplexity=round(ppl, 3), tokens=ntok, seconds=round(time.time() - t0))
         if results:
             r["change_pct"] = round(100 * (ppl / results[0]["perplexity"] - 1), 2)
         print(json.dumps(r), flush=True)
@@ -358,8 +371,9 @@ def main():
         del model
     out = dict(model=args.model, dataset="wikitext-2-raw-v1 test", seq=args.seq, windows=args.windows,
                self_check=chk, results=results)
+    tag = "" if (args.attn, args.head) == ("mxfp8", "mxfp8") else f"_attn-{args.attn}_head-{args.head}"
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results",
-                           "imbewu_numerics_qwen0.5b.json"), "w") as fh:
+                           f"imbewu_numerics_qwen0.5b{tag}.json"), "w") as fh:
         json.dump(out, fh, indent=2)
 
 

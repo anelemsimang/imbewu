@@ -2,7 +2,7 @@
   "model": "Qwen/Qwen2.5-0.5B",
   "dataset": "wikitext-2-raw-v1 test",
   "seq": 512,
-  "windows": 1,
+  "windows": 8,
   "self_check": {
     "softmax_rows_identical_to_emulator": "20/20",
     "rmsnorm_rows_identical_to_emulator": "20/20",
@@ -11,10 +11,23 @@
   },
   "results": [
     {
+      "config": "FP32 (reference)",
+      "perplexity": 18.011,
+      "reused": true
+    },
+    {
+      "config": "Imbewu, FP8 activations x FP8 weights",
+      "perplexity": 20.376,
+      "tokens": 4088,
+      "seconds": 958,
+      "change_pct": 13.13
+    },
+    {
       "config": "Imbewu, FP8 activations x FP4 weights",
-      "perplexity": 18.586,
-      "tokens": 511,
-      "seconds": 196
+      "perplexity": 26.292,
+      "tokens": 4088,
+      "seconds": 935,
+      "change_pct": 45.98
     }
   ]
 }
