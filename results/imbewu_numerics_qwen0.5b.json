@@ -1,0 +1,20 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "dataset": "wikitext-2-raw-v1 test",
+  "seq": 512,
+  "windows": 1,
+  "self_check": {
+    "softmax_rows_identical_to_emulator": "20/20",
+    "rmsnorm_rows_identical_to_emulator": "20/20",
+    "silu_rows_identical_to_emulator": "20/20",
+    "matmul_results_differing_from_exact_rounding": "0/192"
+  },
+  "results": [
+    {
+      "config": "Imbewu, FP8 activations x FP4 weights",
+      "perplexity": 18.586,
+      "tokens": 511,
+      "seconds": 196
+    }
+  ]
+}
