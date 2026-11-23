@@ -39,7 +39,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FMT = {"mxint8": 0, "mxfp8": 1, "mxfp4": 2}
 BLOCK, HALF, MAX_CMDS, OUT_BASE = 32, 1024, 16, 1 << 18
 RTL = ["rtl/mx_mul.v", "rtl/fp32_add_fx.v", "rtl/pe_v5.v", "rtl/systolic_v5.v",
-       "rtl/matmul_unit.v", "rtl/sram.v", "rtl/tile_v3.v", "tests/tb_tile_v1.v"]
+       os.environ.get("IMBEWU_MATMUL", "rtl/matmul_unit.v"),     # replaceable for planted-bug checks
+       "rtl/sram.v", "rtl/tile_v3.v", "tests/tb_tile_v1.v"]
 
 
 def quantise_rows(m, fmt):
@@ -201,7 +202,10 @@ def run_tile(plan, work, lat=40, every=1):
     dump = pre + "_dump.hex"
     log = subprocess.run(["vvp", "-n", sim, f"+PRE={pre}", f"+LAT={lat}", f"+EVERY={every}",
                           f"+DUMP={dump}"], check=True, capture_output=True, text=True).stdout
-    words = [int(l, 16) for l in open(dump).read().split()]
+    # undefined bits ("x") mean the tile produced no valid answer: count as wrong
+    raw = open(dump).read().split()
+    undefined = any(("x" in l or "z" in l) for l in raw)
+    words = [int(l.replace("x", "0").replace("z", "0"), 16) for l in raw]
     y_bits = np.zeros((plan["M"], plan["Nout"]), dtype=np.uint32)
     for cw, (r, c0) in enumerate(plan["outmap_rows"]):
         full = 0
@@ -209,7 +213,7 @@ def run_tile(plan, work, lat=40, every=1):
             full |= words[4 * cw + q] << (8 * N * q)
         for j in range(N):
             y_bits[r, c0 + j] = (full >> (32 * j)) & 0xFFFFFFFF
-    return y_bits, log
+    return y_bits, (log + "\nUNDEFINED answers read back\n") if undefined else log
 
 
 def imbewu_linear(layer, x, a_fmt="mxfp8", w_fmt="mxfp4", N=16, work=None, packed=True):
@@ -219,7 +223,7 @@ def imbewu_linear(layer, x, a_fmt="mxfp8", w_fmt="mxfp4", N=16, work=None, packe
     plan = plan_layer(xn, w, N, a_fmt, w_fmt, packed)
     work = work or os.path.join(ROOT, "build", "compile")
     y_bits, log = run_tile(plan, work)
-    exact = bool(np.array_equal(y_bits, plan["expect"]))
+    exact = bool(np.array_equal(y_bits, plan["expect"])) and "UNDEFINED" not in log
     y = y_bits.view(np.float32)[:plan["M0"], :plan["Nout0"]].astype(np.float64)
     ref = xn @ w.T
     err = float(np.linalg.norm(y - ref) / np.linalg.norm(ref))

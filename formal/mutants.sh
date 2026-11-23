@@ -56,6 +56,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         rm -rf $OUT/tilev3; VER=v3 OUT=$OUT/tilev3 TILE_V3=$m tests/run_tile_v2_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = soc ]; then
         rm -rf $OUT/soc; OUT=$OUT/soc SOC=$m tests/run_soc_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = compile ]; then
+        rm -rf build/compile/test_*; IMBEWU_MATMUL=$PWD/$m python3 tests/run_compile_tests.py > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalmm ]; then
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -79,7 +81,7 @@ mutate $S "first row uses the previous job's scales" 's/row_exp(sa_slot\[rd_slot
 mutate $S "row number not advanced"                  's/rd_row      <= rd_row + 1'"'"'b1;/rd_row      <= rd_row;/' formal
 echo "version 4 engine:"
 M=rtl/mx_mul.v; F=rtl/fp32_add_fx.v; Q=rtl/pe_v4.v
-mutate $M "mixed job: FP4 side reads the wrong half of its lane"  's/2'"'"'d2: dec = dec4(x\[3:0\]);/2'"'"'d2: dec = dec4(x[7:4]);/' mul
+mutate $M "mixed job: FP4 side reads the wrong half of its lane"  's/2'"'"'d2: dec = dec4(hi ? x\[7:4\] : x\[3:0\]);/2'"'"'d2: dec = dec4(hi ? x[3:0] : x[7:4]);/' mul
 mutate $F "FP32 rounding: ties always rounded up"     's/(g \&\& (st || n_wide\[0\]))/(g)/' fadd
 mutate $F "FP32 rounding: sticky bits ignored"        's/st = |(R \& ~({83{1'"'"'b1}} << (s - 1)));/st = 1'"'"'b0;/' fadd
 mutate $F "FP32 overflow not turned into infinity"    's/biased >= 13'"'"'sd255/biased >= 13'"'"'sd256/' fadd
@@ -122,5 +124,8 @@ echo "tile + RISC-V core:"
 SC=rtl/tile_soc.v
 mutate $SC "command words joined in the wrong order"    's/cmdw\[3\], cmdw\[2\], cmdw\[1\], cmdw\[0\]}/cmdw[3], cmdw[1], cmdw[2], cmdw[0]}/' soc
 mutate $SC "status bits swapped (program stops early)"  's/8'"'"'h2C: cpu_rdata <= {30'"'"'d0, done_seen, t_busy};/8'"'"'h2C: cpu_rdata <= {30'"'"'d0, t_busy, done_seen};/' soc
+echo "FP4 packed two per lane (D-020):"
+mutate $T "packed FP4: high and low halves swapped"       's/t_ph <= (pk_a || pk_b) \&\& beat\[0\];/t_ph <= (pk_a || pk_b) \&\& !beat[0];/' compile
+mutate $T "packed FP4: words not reused for two beats"    's/assign b_addr  = pk_b ? nt \* half_beats + (beat >> 1)/assign b_addr  = pk_b ? nt * half_beats + beat/' compile
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

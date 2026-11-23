@@ -682,3 +682,35 @@ two elements per beat. Recorded as decision D-020.
 Engine use is 57% here because each weight group serves only 2 batches of
 tokens, so most of the time goes on fetching weights (memory bound, as
 expected for decode-like work).
+
+## 2026-11-23 - FP4 weights packed two per lane (D-020): the memory saving is now real
+
+**What changed.** In a mixed job (exactly one side FP4), that side is
+stored two FP4 numbers per byte in memory. The tiling controller reads
+each such word once and uses it on two beats in a row; a one-bit tag
+travelling with the data tells each cell which half to use. The engine
+still does one multiply per cell per tick, but the FP4 side's memory
+traffic is halved. Files: `rtl/mx_mul.v` (half select), `rtl/pe_v5.v`,
+`rtl/systolic_v5.v` (the tag), `rtl/matmul_unit.v` (packed addressing),
+`rtl/tile_v3.v` (command bit 18), `tools/imbewu_compile.py` (packing).
+
+**Checks.** Multiplier on every possible input, now including the half
+select: 2,088,968 cases, 0 errors. Compiler tests (8 layers, including
+FP4 activations packed and an unpacked comparison): all bit exact. Every
+earlier engine, tiling, tile and RISC-V test and the formal proofs re-run:
+all pass. 2 new planted bugs (halves swapped; packed words not reused)
+caught, after making the compiler report undefined answers as failures
+rather than crash.
+
+**The real Qwen layer again** (FP8 activations x FP4 weights, 16x16 engine):
+
+| | One FP4 per byte | Two per byte (D-020) |
+|---|---|---|
+| Main-memory reads | 22,176 words | **11,200 words** |
+| Commands | 16 | 8 (more weights fit per SRAM half) |
+| Time | 25,053 ticks | **16,726 ticks (1.5x faster)** |
+| Engine busy | 57% | **85%** |
+| Answers | bit exact, 12.3% from FP32 | bit exact, identical |
+
+So FP4 weights now deliver what the performance model assumed: half the
+weight traffic for the same arithmetic.

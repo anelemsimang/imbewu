@@ -151,8 +151,11 @@ weights kept across commands and fetched well ahead, overlapped memory
 transfers, and its own RISC-V control core running a C driver.
 
 The first compiler step (W3) runs a real PyTorch layer on the simulated
-tile, bit exact. It showed FP4 weights do not yet save memory traffic in
-mixed jobs (D-020).
+tile, bit exact. It showed FP4 weights did not yet save memory traffic in
+mixed jobs; fixed (D-020).
 
-Next: two FP4 weights per lane in mixed jobs (D-020), then the vector unit
-(softmax, normalisation, activations) and a whole transformer block.
+FP4 weights are now packed two per byte (D-020): half the memory reads and
+1.5x faster on the real layer.
+
+Next: the vector unit (softmax, normalisation, activations) and a whole
+transformer block running through the compiler.
