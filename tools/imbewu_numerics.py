@@ -235,6 +235,8 @@ def make_attention(qk_fmt="mxfp8", pv_fmt="mxfp8"):
         B, H, T, D = query.shape
         if qk_fmt is None:
             s = torch.matmul(query.float(), k.float().transpose(2, 3))
+        elif qk_fmt == "bf16":                     # candidate: BF16 inputs, FP32 sums (approximate model)
+            s = torch.matmul(query.bfloat16().float(), k.bfloat16().float().transpose(2, 3))
         else:                                      # Q x K^T on the engine
             s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
                            qk_fmt, qk_fmt).reshape(B, H, T, -1)
@@ -271,6 +273,8 @@ def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8", attn="mxfp8
     # just one half in FP32 (diagnostics)
     qk = None if attn in ("fp32", "qk-fp32") else (a_fmt if attn == "pv-fp32" else attn)
     pv = None if attn in ("fp32", "pv-fp32") else (a_fmt if attn == "qk-fp32" else attn)
+    if attn == "qk-bf16":                          # Q x K^T in BF16, probabilities x V in FP8
+        qk, pv = "bf16", a_fmt
     m.eager_attention_forward = make_attention(qk, pv)
     return model
 
@@ -338,7 +342,7 @@ def main():
                     help="reuse a known FP32 perplexity instead of recomputing it")
     ap.add_argument("--configs", default="ref,fp8,fp4")
     ap.add_argument("--attn", default="mxfp8",
-                    help="attention products: mxfp8, mxint8, fp32, qk-fp32 or pv-fp32")
+                    help="attention products: mxfp8, mxint8, fp32, qk-fp32, pv-fp32 or qk-bf16")
     ap.add_argument("--head", default="mxfp8", help="mxfp8 or none (output layer)")
     args = ap.parse_args()
     torch.set_num_threads(max(1, os.cpu_count() or 1))
