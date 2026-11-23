@@ -56,7 +56,9 @@ design effort (see DECISIONS.md, D-013).
       (`rtl/tile_v3.v`): decode-style run 40% -> 84% engine busy since tile v1
 - [x] A small RISC-V control core per tile: PicoRV32 (open source) runs a C
       driver that builds the command list (`rtl/tile_soc.v`, `fw/`)
-- [ ] Vector unit for the non-matmul parts of AI (activations, softmax, normalisation)
+- [x] Vector unit for the non-matmul parts of AI (`rtl/vu_v1.v`): softmax,
+      RMSNorm, SiLU bit exact vs emulator, within 1e-6 of PyTorch
+- [ ] Connect the vector unit to the tile; native exp2 / reciprocal steps
 - [ ] Tile instruction set, documented
 - [ ] Run one real neural-network layer end-to-end in simulation
 - [ ] Power gating: switch off idle parts of the tile
@@ -157,5 +159,7 @@ mixed jobs; fixed (D-020).
 FP4 weights are now packed two per byte (D-020): half the memory reads and
 1.5x faster on the real layer.
 
-Next: the vector unit (softmax, normalisation, activations) and a whole
-transformer block running through the compiler.
+The vector unit (version 1) runs softmax, RMSNorm and SiLU.
+
+Next: connect the vector unit to the tile, then a whole transformer block
+running through the compiler.

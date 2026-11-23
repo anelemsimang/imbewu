@@ -714,3 +714,38 @@ rather than crash.
 
 So FP4 weights now deliver what the performance model assumed: half the
 weight traffic for the same arithmetic.
+
+## 2026-11-23 - Vector unit, version 1: softmax, RMSNorm and SiLU (goal G4)
+
+**What it is.** The parts of a transformer that are not matrix multiplies:
+softmax (attention), RMSNorm (between layers) and SiLU (the activation).
+- `rtl/fp32_ops.v`: IEEE 754 FP32 add and multiply, built on the already
+  verified "exact sum, rounded once" adder, so rounding is the proven one.
+- `rtl/vu_v1.v`: L FP32 lanes (one per engine column), 8 vector
+  registers, 15 one-tick instructions: load/store, add, subtract,
+  multiply, max, min, lane sum and lane max (fixed pairwise order), FP32
+  constants, floor, 2^n, and first guesses for 1/x and 1/sqrt(x).
+- `tools/vu_asm.py`: assembler, an exact emulator of every instruction,
+  and the programs. exp(x) = 2^(whole part) x (7-term series for
+  2^fraction); 1/x and 1/sqrt(x) = first guess + 3 Newton steps.
+
+**Checks.**
+- FP32 add and multiply vs NumPy (IEEE 754): 100,000 cases aimed at
+  ties, cancellation, subnormals, overflow, signed zeros and infinities:
+  0 errors (`make test-fp32ops`, 50,000 cases).
+- Programs on the hardware (`make test-vu`): softmax, RMSNorm and SiLU at
+  4, 8 and 16 lanes, 4 random rows each: **hardware = emulator bit for
+  bit in all 9**; worst error against PyTorch (float64): softmax 9.4e-7,
+  RMSNorm 1.8e-7, SiLU 5.3e-7, i.e. at the limit of FP32 itself.
+- 4 planted bugs (floor of negatives, 2^n off by two, MAX returning the
+  smaller number, lane sum missing half the lanes): all caught.
+
+**Speed (ticks for one row).** 16 lanes x 2 vectors (a row of 32
+numbers): softmax 96, RMSNorm 45, SiLU 101. Each vector of SiLU costs
+about 50 instructions (the exp series and the Newton steps), so on long
+rows the vector unit, not the engine, could become the bottleneck for
+SiLU and softmax. Planned improvements: a native exp2 and reciprocal
+step, and several instructions per tick.
+
+**Not done yet:** connecting it to the tile (reading the engine's result
+rows directly), and its size (measurement running).
