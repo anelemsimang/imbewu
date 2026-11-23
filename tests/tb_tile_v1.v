@@ -3,6 +3,7 @@
 // accepts a request only on some ticks (limited bandwidth).
 // Settings: -DGRID_N=4 [-DTILE_V2]   plusargs: +PRE=<prefix> +LAT=<ticks> +EVERY=<k>
 //   (main memory accepts one request every k ticks: bandwidth 1/k words/tick)
+//   optional +DUMP=<file>: write every answer word read back from main memory
 `timescale 1ns/1ps
 `ifndef GRID_N
 `define GRID_N 4
@@ -56,7 +57,8 @@ module tb_tile_v1;
     reg [EAW+W8-1:0] expv [0:65535];
     reg [31:0] meta [0:3];
     reg [1023:0] pre;
-    integer k, n, nexp, errors = 0, t0;
+    integer k, n, nexp, errors = 0, t0, dfd;
+    reg [1023:0] dname;
     initial begin
         if (!$value$plusargs("PRE=%s", pre)) begin $display("need +PRE="); $finish; end
         if (!$value$plusargs("LAT=%d", lat)) lat = 20;
@@ -84,6 +86,12 @@ module tb_tile_v1;
                  N, N, meta[0], nexp, errors, lat, every);
         $display("TILE %0dx%0d: %0d ticks busy, engine fed on %0d (%0d%%); memory: %0d reads, %0d writes",
                  N, N, ticks_busy, ticks_engine, 100 * ticks_engine / ticks_busy, reads, writes);
+        // optional: write every answer word, in the order of the _exp file
+        if ($value$plusargs("DUMP=%s", dname)) begin
+            dfd = $fopen(dname, "w");
+            for (n = 0; n < nexp; n = n + 1) $fwrite(dfd, "%h\n", mem[expv[n][EAW+W8-1:W8]]);
+            $fclose(dfd);
+        end
         if (errors == 0 && ticks_engine == meta[3]) $display("PASS"); else $display("FAIL");
         $finish;
     end
