@@ -20,6 +20,7 @@ module pe_v5 (
     input  wire               v_in,
     input  wire               bl_in,
     input  wire               jl_in,
+    input  wire               ph_in,      // FP4 side: use the high half of its lane (D-020)
     input  wire [7:0]         b_in,
     input  wire [1:0]         fb_in,
     input  wire [7:0]         sb_in,
@@ -29,6 +30,7 @@ module pe_v5 (
     output reg                v_out,
     output reg                bl_out,
     output reg                jl_out,
+    output reg                ph_out,
     output reg  [7:0]         b_out,
     output reg  [1:0]         fb_out,
     output reg  [7:0]         sb_out,
@@ -46,7 +48,7 @@ module pe_v5 (
     output reg  [31:0]        res       // FP32 result of the latest finished job
 );
     wire signed [47:0] p;
-    mx_mul u_mul (.fa(fa_in), .fb(fb_in), .a(a_in), .b(b_in), .p(p));
+    mx_mul u_mul (.fa(fa_in), .fb(fb_in), .a(a_in), .b(b_in), .ph(ph_in), .p(p));
     wire signed [10:0] e = $signed({3'd0, sa_in}) + $signed({3'd0, sb_in}) - 11'sd272
                          - ((fa_in == 2'd0) ? 11'sd6 : 11'sd0)
                          - ((fb_in == 2'd0) ? 11'sd6 : 11'sd0);
@@ -68,7 +70,7 @@ module pe_v5 (
     assign req_acc = acc;
 
     always @(posedge clk) begin
-        a_out  <= a_in;  fa_out <= fa_in; sa_out <= sa_in;
+        a_out  <= a_in;  fa_out <= fa_in; sa_out <= sa_in; ph_out <= ph_in;
         b_out  <= b_in;  fb_out <= fb_in; sb_out <= sb_in;
         p_r    <= p;
         e_r    <= e;

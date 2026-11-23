@@ -37,7 +37,7 @@ module pe_v4 (
     output reg  [31:0] res          // FP32 result of the latest finished job
 );
     wire signed [47:0] p;
-    mx_mul u_mul (.fa(fa_in), .fb(fb_in), .a(a_in), .b(b_in), .p(p));
+    mx_mul u_mul (.fa(fa_in), .fb(fb_in), .a(a_in), .b(b_in), .ph(1'b0), .p(p));
 
     reg  signed [47:0] partial;     // exact total of the current block, units 2^-18
     reg         [31:0] acc;         // FP32 total of the finished blocks

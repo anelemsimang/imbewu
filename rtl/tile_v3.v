@@ -18,6 +18,7 @@
 // only overwritten once every earlier command using it has been computed.
 //
 // Command field added: b_slot = bit 19 (inside the 20 unused bits).
+// tile_v3 adds: pk = bit 18: the FP4 side is packed two per lane (D-020).
 // ---------------------------------------------------------------------------
 // (Description of version 1 follows.)
 // tile_v1.v - the Imbewu tile, first version (Phase 2; goals G1, G3, G4)
@@ -115,7 +116,7 @@ module tile_v3 #(
     matmul_unit #(.N(N), .G(G), .AW(16)) u_mm (
         .clk(clk), .rst(rst), .start(mm_start),
         .cfg_mt(ccmd[87:80]), .cfg_nt(ccmd[79:72]), .cfg_beats(ccmd[71:56]),
-        .cfg_bb(ccmd[55:40]), .cfg_nb(ccmd[39:24]), .cfg_fa(ccmd[23:22]), .cfg_fb(ccmd[21:20]),
+        .cfg_bb(ccmd[55:40]), .cfg_nb(ccmd[39:24]), .cfg_fa(ccmd[23:22]), .cfg_fb(ccmd[21:20]), .cfg_pk(ccmd[18]),
         .busy(mm_busy), .done(mm_done), .feed(mm_feed),
         .a_addr(a16), .a_data(a_rd), .b_addr(b16), .b_data(b_rd),
         .sa_addr(sa16), .sa_data(sa_rd), .sb_addr(sb16), .sb_data(sb_rd),

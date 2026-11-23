@@ -30,6 +30,9 @@ module tb_systolic_v4;
 `endif
         .clk(clk), .rst(rst), .in_valid(in_valid),
         .in_blk_last(in_bl), .in_job_last(in_jl), .in_fa(in_fa), .in_fb(in_fb),
+`ifdef V5
+        .in_ph(1'b0),
+`endif
         .a_col(a_col), .b_row(b_row), .in_a_scale(a_sc), .in_b_scale(b_sc),
         .out_valid(out_valid), .out_row_idx(out_row_idx), .out_row(out_row));
     always #5 clk = ~clk;

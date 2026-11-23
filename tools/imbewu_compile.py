@@ -60,7 +60,7 @@ def values_x512(q, f):
     return table[codes]
 
 
-def plan_layer(x, w, N, a_fmt, w_fmt):
+def plan_layer(x, w, N, a_fmt, w_fmt, packed=True):
     """Make the memory image, command list and expected answers."""
     M0, K0 = x.shape
     Nout0 = w.shape[0]
@@ -71,12 +71,15 @@ def plan_layer(x, w, N, a_fmt, w_fmt):
     wp = np.zeros((Nout, K)); wp[:Nout0, :K0] = w
     fa, fb = FMT[a_fmt], FMT[w_fmt]
     pair = fa == 2 and fb == 2
+    # D-020: in a mixed job the FP4 side is stored two numbers per byte
+    pk_a = packed and fa == 2 and fb != 2
+    pk_b = packed and fb == 2 and fa != 2
     beats = K // 2 if pair else K
     bb = BLOCK // 2 if pair else BLOCK
     KB = K // BLOCK
     # as many tiles per command as the SRAM halves allow
-    MT = max(1, min(M // N, HALF // beats, HALF // N))
-    NT = max(1, min(Nout // N, HALF // beats, HALF // (MT * N)))
+    MT = max(1, min(M // N, HALF // (beats // 2 if pk_a else beats), HALF // N))
+    NT = max(1, min(Nout // N, HALF // (beats // 2 if pk_b else beats), HALF // (MT * N)))
     while (M // N) % MT: MT -= 1
     while (Nout // N) % NT: NT -= 1
     groups, batches = Nout // (N * NT), M // (N * MT)
@@ -102,8 +105,12 @@ def plan_layer(x, w, N, a_fmt, w_fmt):
             A, SA, B, SB = [], [], [], []
             for mt in range(MT):
                 rows = [qa[row0 + mt * N + i] for i in range(N)]
-                for t in range(beats):
-                    if pair:
+                for t in range(beats // 2 if pk_a else beats):
+                    if pk_a:
+                        A.append(word([rows[i][(2 * t) // BLOCK][0][(2 * t) % BLOCK] |
+                                       (rows[i][(2 * t + 1) // BLOCK][0][(2 * t + 1) % BLOCK] << 4)
+                                       for i in range(N)]))
+                    elif pair:
                         A.append(word([rows[i][(2 * t) // BLOCK][0][(2 * t) % BLOCK] |
                                        (rows[i][(2 * t + 1) // BLOCK][0][(2 * t + 1) % BLOCK] << 4)
                                        for i in range(N)]))
@@ -114,8 +121,12 @@ def plan_layer(x, w, N, a_fmt, w_fmt):
             if p == 0:
                 for nt in range(NT):
                     cols = [qw[col0 + nt * N + j] for j in range(N)]
-                    for t in range(beats):
-                        if pair:
+                    for t in range(beats // 2 if pk_b else beats):
+                        if pk_b:
+                            B.append(word([cols[j][(2 * t) // BLOCK][0][(2 * t) % BLOCK] |
+                                           (cols[j][(2 * t + 1) // BLOCK][0][(2 * t + 1) % BLOCK] << 4)
+                                           for j in range(N)]))
+                        elif pair:
                             B.append(word([cols[j][(2 * t) // BLOCK][0][(2 * t) % BLOCK] |
                                            (cols[j][(2 * t + 1) // BLOCK][0][(2 * t + 1) % BLOCK] << 4)
                                            for j in range(N)]))
@@ -129,7 +140,7 @@ def plan_layer(x, w, N, a_fmt, w_fmt):
             cmds.append(pack([(in_addr, 20), (len(A), 16), (len(B), 16), (len(SA), 12),
                               (len(SB), 12), (out_ptr, 20), (n_c, 16), (MT, 8), (NT, 8),
                               (beats, 16), (bb, 16), (KB, 16), (fa, 2), (fb, 2),
-                              (g % 2, 1), (0, 19)]))
+                              (g % 2, 1), (int(pk_a or pk_b), 1), (0, 18)]))
             out_ptr += 4 * n_c
     # expected answers from an independent software path: exact block sums
     # (integers), one FP32 rounding per block (exact fractions)
@@ -201,11 +212,11 @@ def run_tile(plan, work, lat=40, every=1):
     return y_bits, log
 
 
-def imbewu_linear(layer, x, a_fmt="mxfp8", w_fmt="mxfp4", N=16, work=None):
+def imbewu_linear(layer, x, a_fmt="mxfp8", w_fmt="mxfp4", N=16, work=None, packed=True):
     """Run y = layer(x) (no bias) on the simulated Imbewu tile."""
     w = layer.weight.detach().double().numpy()
     xn = x.detach().double().numpy()
-    plan = plan_layer(xn, w, N, a_fmt, w_fmt)
+    plan = plan_layer(xn, w, N, a_fmt, w_fmt, packed)
     work = work or os.path.join(ROOT, "build", "compile")
     y_bits, log = run_tile(plan, work)
     exact = bool(np.array_equal(y_bits, plan["expect"]))
@@ -213,7 +224,7 @@ def imbewu_linear(layer, x, a_fmt="mxfp8", w_fmt="mxfp4", N=16, work=None):
     ref = xn @ w.T
     err = float(np.linalg.norm(y - ref) / np.linalg.norm(ref))
     ticks = [l for l in log.splitlines() if "ticks busy" in l]
-    report = dict(activations=a_fmt, weights=w_fmt, engine=f"{N}x{N}",
+    report = dict(activations=a_fmt, weights=w_fmt, engine=f"{N}x{N}", fp4_packed=packed,
                   commands=len(plan["cmds"]), tiles_per_command=f"{plan['MT']}x{plan['NT']}",
                   weight_groups=plan["groups"], token_batches=plan["batches"],
                   bit_exact_vs_reference=exact, tile_pass="PASS" in log,

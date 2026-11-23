@@ -30,6 +30,7 @@ module systolic_v5 #(
     input  wire              in_job_last,
     input  wire [1:0]        in_fa,
     input  wire [1:0]        in_fb,
+    input  wire              in_ph,      // FP4 side uses the high half of its lanes (D-020)
     input  wire [N*8-1:0]    a_col,
     input  wire [N*8-1:0]    b_row,
     input  wire [N*8-1:0]    in_a_scale,
@@ -49,7 +50,7 @@ module systolic_v5 #(
     localparam NG  = (N + GE - 1) / GE;         // adders per row
     localparam GW  = $clog2(GE) + 1;
     localparam LAT = 6;                         // extra ticks vs version 4
-    localparam AW  = 8 + 2 + 8 + 3;
+    localparam AW  = 8 + 2 + 8 + 3 + 1;     // a, fa, sa, {v, bl, jl}, ph
     localparam BW  = 8 + 2 + 8;
 
     wire job_last = in_valid & in_job_last;
@@ -72,7 +73,7 @@ module systolic_v5 #(
     genvar i, j, g;
     generate
         for (i = 0; i < N; i = i + 1) begin : skew
-            wire [AW-1:0] a_new = {a_col[i*8 +: 8], in_fa, in_a_scale[i*8 +: 8],
+            wire [AW-1:0] a_new = {in_ph, a_col[i*8 +: 8], in_fa, in_a_scale[i*8 +: 8],
                                    in_valid, in_valid & in_blk_last, job_last};
             wire [BW-1:0] b_new = {b_row[i*8 +: 8], in_fb, in_b_scale[i*8 +: 8]};
             if (i == 0) begin : direct
@@ -102,15 +103,16 @@ module systolic_v5 #(
                 wire [31:0] res;
                 wire [7:0] ao, bo, sao, sbo;
                 wire [1:0] fao, fbo;
-                wire vo, blo, jlo;
+                wire vo, blo, jlo, pho;
                 wire signed [47:0] qpt, qp;
                 wire signed [10:0] qe;
                 pe_v5 u_pe (
                     .clk(clk), .rst(rst),
                     .a_in(ai[20:13]), .fa_in(ai[12:11]), .sa_in(ai[10:3]),
-                    .v_in(ai[2]), .bl_in(ai[1]), .jl_in(ai[0]),
+                    .v_in(ai[2]), .bl_in(ai[1]), .jl_in(ai[0]), .ph_in(ai[21]),
                     .b_in(bi[17:10]), .fb_in(bi[9:8]), .sb_in(bi[7:0]),
                     .a_out(ao), .fa_out(fao), .sa_out(sao), .v_out(vo), .bl_out(blo), .jl_out(jlo),
+                    .ph_out(pho),
                     .b_out(bo), .fb_out(fbo), .sb_out(sbo),
                     .req_v(rq_v[i][j]), .req_jl(rq_jl[i][j]), .req_part(qpt), .req_p(qp), .req_e(qe),
                     .req_acc(rq_acc[i][j]),
@@ -119,7 +121,7 @@ module systolic_v5 #(
                 assign rq_pt[i][j] = qpt;
                 assign rq_p[i][j]  = qp;
                 assign rq_e[i][j] = qe;
-                assign a_bus[i][j+1] = {ao, fao, sao, vo, blo, jlo};
+                assign a_bus[i][j+1] = {pho, ao, fao, sao, vo, blo, jlo};
                 assign b_bus[i+1][j] = {bo, fbo, sbo};
                 assign res_flat[(i*N+j)*32 +: 32] = res;
 `ifdef FORMAL

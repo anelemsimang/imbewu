@@ -19,6 +19,9 @@
 // Configuration (held while busy): cfg_mt, cfg_nt = tiles down / across;
 // cfg_beats = beats per job (whole K); cfg_bb = beats per MX block;
 // cfg_nb = blocks per job; cfg_fa, cfg_fb = formats.
+// cfg_pk = 1 in a mixed job (exactly one side FP4): that side's memory holds
+// two FP4 numbers per lane (beats/2 words per tile); each word is read for
+// two beats in a row, low half first (D-020). Halves its memory traffic.
 // Rules: cfg_beats >= N; cfg_bb >= min(16, N); cfg_beats = cfg_nb * cfg_bb.
 module matmul_unit #(
     parameter N  = 4,
@@ -35,6 +38,7 @@ module matmul_unit #(
     input  wire [AW-1:0]   cfg_nb,
     input  wire [1:0]      cfg_fa,
     input  wire [1:0]      cfg_fb,
+    input  wire            cfg_pk,        // FP4 side packed two numbers per lane (D-020)
     output reg             busy,
     output reg             done,          // one-tick pulse when C is complete
     output wire            feed,          // high on every tick the engine is fed a beat
@@ -67,19 +71,23 @@ module matmul_unit #(
     wire last_inblk = (bib == cfg_bb - 1);
     wire last_tile  = (mt == cfg_mt - 1) && (nt == cfg_nt - 1);
 
-    assign a_addr  = mt * cfg_beats + beat;
-    assign b_addr  = nt * cfg_beats + beat;
+    wire pk_a = cfg_pk && (cfg_fa == 2'd2) && (cfg_fb != 2'd2);
+    wire pk_b = cfg_pk && (cfg_fb == 2'd2) && (cfg_fa != 2'd2);
+    wire [AW-1:0] half_beats = cfg_beats >> 1;
+    assign a_addr  = pk_a ? mt * half_beats + (beat >> 1) : mt * cfg_beats + beat;
+    assign b_addr  = pk_b ? nt * half_beats + (beat >> 1) : nt * cfg_beats + beat;
     assign sa_addr = mt * cfg_nb + blk;
     assign sb_addr = nt * cfg_nb + blk;
 
     // tags that go with this tick's reads; they meet the data one tick later
-    reg t_v, t_bl, t_jl;
+    reg t_v, t_bl, t_jl, t_ph;
     always @(posedge clk) begin
         if (rst) begin
             run <= 1'b0; mt <= 0; nt <= 0; beat <= 0; bib <= 0; blk <= 0;
             t_v <= 1'b0; t_bl <= 1'b0; t_jl <= 1'b0;
         end else begin
             t_v  <= run;
+            t_ph <= (pk_a || pk_b) && beat[0];      // odd beat: high half
             t_bl <= run & last_inblk;
             t_jl <= run & last_beat;
             if (start && !busy && !run) begin   // never restart mid-run
@@ -112,7 +120,7 @@ module matmul_unit #(
     wire [N*32-1:0] o_row;
     systolic_v5 #(.N(N), .G(G)) u_eng (
         .clk(clk), .rst(rst), .in_valid(t_v), .in_blk_last(t_bl), .in_job_last(t_jl),
-        .in_fa(cfg_fa), .in_fb(cfg_fb), .a_col(a_data), .b_row(b_data),
+        .in_fa(cfg_fa), .in_fb(cfg_fb), .in_ph(t_ph), .a_col(a_data), .b_row(b_data),
         .in_a_scale(sa_data), .in_b_scale(sb_data),
         .out_valid(o_valid), .out_row_idx(o_idx), .out_row(o_row));
 

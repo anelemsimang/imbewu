@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Expected product for EVERY input of rtl/mx_mul.v: 16 format pairs x
-256 x 256 = 1,048,576 cases, values from ml_dtypes. Bit 48 marks a skipped
+"""Expected product for EVERY input of rtl/mx_mul.v: 2 halves (ph) x 16 format
+pairs x 256 x 256 = 2,097,152 cases, values from ml_dtypes. Bit 48 marks a skipped
 case (uses the FP8 "not a number" code, not supported yet).
 Usage: python3 tools/gen_mul_exhaustive.py OUT_HEX"""
 import os
@@ -21,7 +21,8 @@ def v(f, c):
 def main():
     skipped = 0
     with open(sys.argv[1], "w") as fh:
-        for fa in range(4):
+        for ph in range(2):
+          for fa in range(4):
             for fb in range(4):
                 for a in range(256):
                     for b in range(256):
@@ -30,9 +31,11 @@ def main():
                         if fa == FP4 and fb == FP4:
                             p = v(FP4, a) * v(FP4, b) + v(FP4, a >> 4) * v(FP4, b >> 4)
                         else:
-                            p = v(fa, a) * v(fb, b)
+                            sa = (a >> 4) if (ph and fa == FP4) else a
+                            sb = (b >> 4) if (ph and fb == FP4) else b
+                            p = v(fa, sa) * v(fb, sb)
                         fh.write(f"{p & ((1 << 48) - 1):013x}\n")
-    print(f"multiplier exhaustive: {16 * 65536} cases, {skipped} marked skip")
+    print(f"multiplier exhaustive: {2 * 16 * 65536} cases, {skipped} marked skip")
 
 
 if __name__ == "__main__":

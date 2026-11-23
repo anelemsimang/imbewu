@@ -21,7 +21,7 @@ module tb_matmul_unit;
 
     matmul_unit #(.N(N), .AW(AW)) dut (.clk(clk), .rst(rst), .start(start),
         .cfg_mt(cfg_mt), .cfg_nt(cfg_nt), .cfg_beats(cfg_beats), .cfg_bb(cfg_bb),
-        .cfg_nb(cfg_nb), .cfg_fa(cfg_fa), .cfg_fb(cfg_fb), .busy(busy), .done(done),
+        .cfg_nb(cfg_nb), .cfg_fa(cfg_fa), .cfg_fb(cfg_fb), .cfg_pk(1'b0), .busy(busy), .done(done),
         .a_addr(a_addr), .a_data(a_data), .b_addr(b_addr), .b_data(b_data),
         .sa_addr(sa_addr), .sa_data(sa_data), .sb_addr(sb_addr), .sb_data(sb_data),
         .c_we(c_we), .c_addr(c_addr), .c_data(c_data));
