@@ -223,30 +223,30 @@ class ImbewuRMSNorm(nn.Module):
         return vu_rmsnorm(x.float(), self.weight.float(), self.eps, x.shape[-1])
 
 
-def make_attention(fmt="mxfp8"):
+def make_attention(qk_fmt="mxfp8", pv_fmt="mxfp8"):
+    """Attention with Q x K^T in qk_fmt and probabilities x V in pv_fmt
+    (an MX format on the engine, or None = plain FP32). Softmax is always
+    the vector unit's."""
     from transformers.models.qwen2.modeling_qwen2 import repeat_kv
 
     def attention(module, query, key, value, attention_mask, scaling, dropout=0.0, **kw):
         k = repeat_kv(key, module.num_key_value_groups)
         v = repeat_kv(value, module.num_key_value_groups)
-        # Q x K^T on the engine (both sides activations)
         B, H, T, D = query.shape
-        if fmt is None:                            # attention products kept in FP32
-            s = torch.matmul(query.float(), k.float().transpose(2, 3)) * f32(scaling)
-            if attention_mask is not None:
-                s = s + attention_mask.float()
-            p = vu_softmax(s)
-            o = torch.matmul(p, v.float())
-            return o.transpose(1, 2).contiguous(), None
-        s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
-                       fmt, fmt).reshape(B, H, T, -1)
+        if qk_fmt is None:
+            s = torch.matmul(query.float(), k.float().transpose(2, 3))
+        else:                                      # Q x K^T on the engine
+            s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
+                           qk_fmt, qk_fmt).reshape(B, H, T, -1)
         s = s * f32(scaling)
         if attention_mask is not None:
             s = s + attention_mask.float()
         p = vu_softmax(s)
-        # attention x V on the engine: V^T rows are the "weights"
-        vt = v.float().transpose(-1, -2).reshape(B * H, D, -1)
-        o = imbewu_bmm(p.reshape(B * H, T, -1), vt, fmt, fmt).reshape(B, H, T, D)
+        if pv_fmt is None:
+            o = torch.matmul(p, v.float())
+        else:                                      # probabilities x V on the engine
+            vt = v.float().transpose(-1, -2).reshape(B * H, D, -1)
+            o = imbewu_bmm(p.reshape(B * H, T, -1), vt, pv_fmt, pv_fmt).reshape(B, H, T, D)
         return o.transpose(1, 2).contiguous(), None
     return attention
 
@@ -267,7 +267,11 @@ def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8", attn="mxfp8
     model.model.norm = ImbewuRMSNorm(model.model.norm)
     if head_fmt:
         model.lm_head = ImbewuLinear(model.lm_head, a_fmt, head_fmt)
-    m.eager_attention_forward = make_attention(None if attn == "fp32" else attn)
+    # attn: a format for both halves, "fp32", or "qk-fp32" / "pv-fp32" to keep
+    # just one half in FP32 (diagnostics)
+    qk = None if attn in ("fp32", "qk-fp32") else (a_fmt if attn == "pv-fp32" else attn)
+    pv = None if attn in ("fp32", "pv-fp32") else (a_fmt if attn == "qk-fp32" else attn)
+    m.eager_attention_forward = make_attention(qk, pv)
     return model
 
 
@@ -333,7 +337,8 @@ def main():
     ap.add_argument("--skip-ref", type=float, default=None,
                     help="reuse a known FP32 perplexity instead of recomputing it")
     ap.add_argument("--configs", default="ref,fp8,fp4")
-    ap.add_argument("--attn", default="mxfp8", help="mxfp8 or fp32 (attention products)")
+    ap.add_argument("--attn", default="mxfp8",
+                    help="attention products: mxfp8, mxint8, fp32, qk-fp32 or pv-fp32")
     ap.add_argument("--head", default="mxfp8", help="mxfp8 or none (output layer)")
     args = ap.parse_args()
     torch.set_num_threads(max(1, os.cpu_count() or 1))
