@@ -804,3 +804,24 @@ engine's exact BF16 arithmetic is still to be designed.)
 **Limits.** One model (0.5B), 4,088 tokens (the FP32 reference was computed
 once and reused); the matrix model rounds via float64, which can in rare
 cases round twice (0 of 192 cases in the check).
+
+**Update: which format for attention scores?** Cheaper options than BF16
+were tried for Q x K^T (FP8 weights, everything else as above):
+
+| Q x K^T format | Perplexity | Change |
+|---|---|---|
+| MX FP8, blocks of 32 | 20.38 | +13.1% |
+| MX FP8, blocks of 8 | 20.64 | +14.6% |
+| MX INT8, blocks of 32 | 20.20 | +12.1% |
+| MX INT8, blocks of 8 | 19.82 | +10.1% |
+| BF16 (approximate model) | 19.17 | +6.4% |
+| **MX INT16 (16-bit whole numbers, blocks of 32)** | **19.14** | **+6.25%** |
+| FP32 | 19.14 | +6.2% |
+
+Smaller blocks do not fix it, so the cause is not mainly one large value
+setting its block's scale; the scores need more precision in every number
+than 8 bits give. **MXINT16 matches FP32** and keeps the engine's way of
+working: one shared power-of-two scale per block of 32 and exact whole-
+number sums inside the block. BF16, where every number has its own
+exponent, would need much wider exact adders. Decision D-021 is updated
+accordingly.

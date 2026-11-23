@@ -290,8 +290,9 @@ For every word, the model asks "which earlier words matter for me?". Each
 word has a query (Q) and a key (K); multiplying Q by K for every pair gives
 a score; softmax turns the scores into weights that add up to 1; the
 weights then mix the words' values (V). Our tests showed the scoring step
-(Q x K) is the delicate one: it needs 16-bit numbers, while the mixing step
-is fine with 8-bit ones.
+(Q x K) is the delicate one: it needs 16-bit numbers (we chose MXINT16:
+16-bit whole numbers sharing a scale per block), while the mixing step is
+fine with 8-bit ones.
 
 ## Perplexity of a whole model "on the chip"
 Simulating every gate of the chip for a whole model would take days, so we
