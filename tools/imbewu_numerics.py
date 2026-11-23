@@ -76,7 +76,7 @@ def imbewu_matmul(x, w, fa="mxfp8", fb="mxfp8", wsplit=None):
     ux, ex = mx_split(x2, fa)
     uw, ew = wsplit if wsplit is not None else mx_split(w, fb)
     out = torch.empty(x2.shape[0], w.shape[0], dtype=torch.float32)
-    step = max(1, (1 << 24) // (w.shape[0] * ux.shape[1]))
+    step = max(1, (1 << 26) // (w.shape[0] * ux.shape[1]))
     for t0 in range(0, x2.shape[0], step):
         u, e = ux[t0:t0 + step], ex[t0:t0 + step]
         # exact sum inside each block (float64 holds it exactly), then the
@@ -88,6 +88,25 @@ def imbewu_matmul(x, w, fa="mxfp8", fb="mxfp8", wsplit=None):
             acc = (acc.double() + blk[kb]).float()
         out[t0:t0 + step] = acc
     return out.reshape(*lead, w.shape[0])
+
+
+def imbewu_bmm(x, w, fa="mxfp8", fb="mxfp8"):
+    """Batched: x [B, T, K] times w [B, N, K]^T, same arithmetic as
+    imbewu_matmul (used for the attention products, all heads at once)."""
+    K = x.shape[-1]
+    pad = (-K) % BLOCK
+    if pad:
+        x = F.pad(x, (0, pad))
+        w = F.pad(w, (0, pad))
+    ux, ex = mx_split(x, fa)                      # [B, T, KB, 32], [B, T, KB]
+    uw, ew = mx_split(w, fb)                      # [B, N, KB, 32], [B, N, KB]
+    blk = torch.einsum("btkc,bnkc->kbtn", ux, uw)
+    sc = ex.permute(2, 0, 1).unsqueeze(-1) + ew.permute(2, 0, 1).unsqueeze(-2)
+    blk = torch.ldexp(blk, sc.long())
+    acc = torch.zeros(x.shape[0], x.shape[1], w.shape[1], dtype=torch.float32)
+    for kb in range(blk.shape[0]):
+        acc = (acc.double() + blk[kb]).float()
+    return acc
 
 
 class ImbewuLinear(nn.Module):
@@ -189,6 +208,11 @@ def vu_silu(x):
     return x * vu_recip(e)
 
 
+class ImbewuSiLU(nn.Module):
+    def forward(self, x):
+        return vu_silu(x.float())
+
+
 class ImbewuRMSNorm(nn.Module):
     def __init__(self, norm):
         super().__init__()
@@ -207,15 +231,15 @@ def make_attention(fmt="mxfp8"):
         v = repeat_kv(value, module.num_key_value_groups)
         # Q x K^T on the engine (both sides activations)
         B, H, T, D = query.shape
-        s = torch.stack([torch.stack([imbewu_matmul(query[b, h].float(), k[b, h].float(), fmt, fmt)
-                                      for h in range(H)]) for b in range(B)])
+        s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
+                       fmt, fmt).reshape(B, H, T, -1)
         s = s * f32(scaling)
         if attention_mask is not None:
             s = s + attention_mask.float()
         p = vu_softmax(s)
         # attention x V on the engine: V^T rows are the "weights"
-        o = torch.stack([torch.stack([imbewu_matmul(p[b, h], v[b, h].float().t().contiguous(), fmt, fmt)
-                                      for h in range(H)]) for b in range(B)])
+        vt = v.float().transpose(-1, -2).reshape(B * H, D, -1)
+        o = imbewu_bmm(p.reshape(B * H, T, -1), vt, fmt, fmt).reshape(B, H, T, D)
         return o.transpose(1, 2).contiguous(), None
     return attention
 
@@ -228,7 +252,7 @@ def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8"):
             setattr(layer.self_attn, name, ImbewuLinear(getattr(layer.self_attn, name), a_fmt, w_fmt))
         for name in ("gate_proj", "up_proj", "down_proj"):
             setattr(layer.mlp, name, ImbewuLinear(getattr(layer.mlp, name), a_fmt, w_fmt))
-        layer.mlp.act_fn = vu_silu
+        layer.mlp.act_fn = ImbewuSiLU()
         layer.input_layernorm = ImbewuRMSNorm(layer.input_layernorm)
         layer.post_attention_layernorm = ImbewuRMSNorm(layer.post_attention_layernorm)
     model.model.norm = ImbewuRMSNorm(model.model.norm)
@@ -296,6 +320,9 @@ def main():
     ap.add_argument("--windows", type=int, default=8)
     ap.add_argument("--seq", type=int, default=512)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--skip-ref", type=float, default=None,
+                    help="reuse a known FP32 perplexity instead of recomputing it")
+    ap.add_argument("--configs", default="ref,fp8,fp4")
     args = ap.parse_args()
     torch.set_num_threads(max(1, os.cpu_count() or 1))
     chk = self_check()
@@ -308,8 +335,11 @@ def main():
     text = "\n\n".join(load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test")["text"])
     ids = tok(text, return_tensors="pt").input_ids
     results = []
-    for label, wf in (("FP32 (reference)", None), ("Imbewu, FP8 activations x FP8 weights", "mxfp8"),
-                      ("Imbewu, FP8 activations x FP4 weights", "mxfp4")):
+    todo = [c for c in (("ref", "FP32 (reference)", None), ("fp8", "Imbewu, FP8 activations x FP8 weights", "mxfp8"),
+                         ("fp4", "Imbewu, FP8 activations x FP4 weights", "mxfp4")) if c[0] in args.configs.split(",")]
+    if args.skip_ref is not None:
+        results.append(dict(config="FP32 (reference)", perplexity=args.skip_ref, reused=True))
+    for _, label, wf in todo:
         t0 = time.time()
         model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.float32,
                                                      attn_implementation="eager").eval()
