@@ -267,7 +267,7 @@ def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8", attn="mxfp8
     model.model.norm = ImbewuRMSNorm(model.model.norm)
     if head_fmt:
         model.lm_head = ImbewuLinear(model.lm_head, a_fmt, head_fmt)
-    m.eager_attention_forward = make_attention(a_fmt if attn != "fp32" else None)
+    m.eager_attention_forward = make_attention(None if attn == "fp32" else attn)
     return model
 
 
