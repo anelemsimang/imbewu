@@ -49,16 +49,23 @@ f32 = lambda v: torch.tensor(v, dtype=torch.float32)
 # ---- matrix units --------------------------------------------------------------
 def mx_split(x, fmt):
     """x [..., K] (K multiple of 32) -> (element values without the block
-    scale [..., KB, 32] as float64, block scale exponents [..., KB])."""
-    xb = x.double().reshape(*x.shape[:-1], -1, BLOCK)
+    scale [..., KB, bs] as float64, block scale exponents [..., KB]).
+    fmt: mxint8, mxfp8, mxfp4, or mxint16 (16-bit whole-number elements, a
+    candidate for attention scores); "@8" or "@16" after the name uses
+    smaller blocks than 32 (also a candidate)."""
+    name, _, bsz = fmt.partition("@")
+    bs = int(bsz) if bsz else BLOCK
+    xb = x.double().reshape(*x.shape[:-1], -1, bs)
     amax = xb.abs().amax(-1)
-    e = torch.floor(torch.log2(amax.clamp(min=2.0 ** -127))) - EMAX[fmt]
+    e = torch.floor(torch.log2(amax.clamp(min=2.0 ** -127))) - (0 if name == "mxint16" else EMAX[name])
     e = e.clamp(-127, 127)
     y = xb / torch.exp2(e).unsqueeze(-1)
-    if fmt == "mxfp8":
+    if name == "mxfp8":
         y = y.clamp(-448, 448).float().to(torch.float8_e4m3fn).double()
-    elif fmt == "mxfp4":
+    elif name == "mxfp4":
         y = round_fp4(y.float()).double()
+    elif name == "mxint16":
+        y = torch.round(y * 16384).clamp(-32768, 32767) / 16384
     else:
         y = torch.round(y * 64).clamp(-128, 127) / 64
     return y, e
@@ -273,8 +280,8 @@ def to_imbewu(model, w_fmt="mxfp4", a_fmt="mxfp8", head_fmt="mxfp8", attn="mxfp8
     # just one half in FP32 (diagnostics)
     qk = None if attn in ("fp32", "qk-fp32") else (a_fmt if attn == "pv-fp32" else attn)
     pv = None if attn in ("fp32", "pv-fp32") else (a_fmt if attn == "qk-fp32" else attn)
-    if attn == "qk-bf16":                          # Q x K^T in BF16, probabilities x V in FP8
-        qk, pv = "bf16", a_fmt
+    if attn.startswith("qk-") and attn != "qk-fp32":   # Q x K^T in another format, rest a_fmt
+        qk, pv = attn[3:], a_fmt
     m.eager_attention_forward = make_attention(qk, pv)
     return model
 
@@ -342,7 +349,8 @@ def main():
                     help="reuse a known FP32 perplexity instead of recomputing it")
     ap.add_argument("--configs", default="ref,fp8,fp4")
     ap.add_argument("--attn", default="mxfp8",
-                    help="attention products: mxfp8, mxint8, fp32, qk-fp32, pv-fp32 or qk-bf16")
+                    help="attention products: mxfp8, mxint8, fp32, qk-fp32, pv-fp32, qk-bf16, "
+                         "qk-mxint16, qk-mxfp8@8 ...")
     ap.add_argument("--head", default="mxfp8", help="mxfp8 or none (output layer)")
     args = ap.parse_args()
     torch.set_num_threads(max(1, os.cpu_count() or 1))
