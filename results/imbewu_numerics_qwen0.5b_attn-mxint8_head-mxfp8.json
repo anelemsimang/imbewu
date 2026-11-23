@@ -1,0 +1,37 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "dataset": "wikitext-2-raw-v1 test",
+  "seq": 512,
+  "windows": 8,
+  "self_check": {
+    "softmax_rows_identical_to_emulator": "20/20",
+    "rmsnorm_rows_identical_to_emulator": "20/20",
+    "silu_rows_identical_to_emulator": "20/20",
+    "matmul_results_differing_from_exact_rounding": "0/192"
+  },
+  "results": [
+    {
+      "config": "FP32 (reference)",
+      "perplexity": 18.011,
+      "reused": true
+    },
+    {
+      "config": "Imbewu, FP8 activations x FP8 weights",
+      "attention": "mxint8",
+      "output_layer": "mxfp8",
+      "perplexity": 20.195,
+      "tokens": 4088,
+      "seconds": 960,
+      "change_pct": 12.12
+    },
+    {
+      "config": "Imbewu, FP8 activations x FP4 weights",
+      "attention": "mxint8",
+      "output_layer": "mxfp8",
+      "perplexity": 25.363,
+      "tokens": 4088,
+      "seconds": 1094,
+      "change_pct": 40.82
+    }
+  ]
+}
