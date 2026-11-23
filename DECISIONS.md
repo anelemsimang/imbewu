@@ -134,3 +134,11 @@ where its slow paths are, but a data-centre chip needs a 3-5 nm process
 whose libraries are licensed under NDA. Real numbers for the pitch's target
 chip will come from a foundry or design-house partner (W5); until then all
 advanced-node figures are labelled as assumptions.
+
+### D-020 - Pack FP4 weights two per lane in mixed jobs
+The first compiled model layer (docs/RESULTS.md, 2026-11-23) showed that
+FP8 x FP4 jobs move FP4 weights one per 8-bit lane, the same memory
+traffic as FP8, so the decode speed-up FP4 weights promise is not yet
+real. The engine and data layout will carry two FP4 weights per lane in
+mixed jobs (the activation side then supplies two FP8 numbers per beat),
+before any FP4 speed claim is made in pitch material.

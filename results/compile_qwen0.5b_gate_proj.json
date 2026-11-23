@@ -1,0 +1,44 @@
+[
+  {
+    "activations": "mxfp8",
+    "weights": "mxfp4",
+    "engine": "16x16",
+    "commands": 16,
+    "tiles_per_command": "1x1",
+    "weight_groups": 8,
+    "token_batches": 2,
+    "bit_exact_vs_reference": true,
+    "tile_pass": true,
+    "relative_error_vs_pytorch_fp32_pct": 12.296,
+    "tile_timing": "25053 ticks busy, engine fed on 14336 (57%); memory: 22176 reads, 1024 writes",
+    "model": "Qwen/Qwen2.5-0.5B",
+    "layer": "layers.0.mlp.gate_proj (first 128 outputs)",
+    "tokens": 32,
+    "K": 896,
+    "output_shape": [
+      32,
+      128
+    ]
+  },
+  {
+    "activations": "mxfp8",
+    "weights": "mxfp8",
+    "engine": "16x16",
+    "commands": 16,
+    "tiles_per_command": "1x1",
+    "weight_groups": 8,
+    "token_batches": 2,
+    "bit_exact_vs_reference": true,
+    "tile_pass": true,
+    "relative_error_vs_pytorch_fp32_pct": 5.068,
+    "tile_timing": "25053 ticks busy, engine fed on 14336 (57%); memory: 22176 reads, 1024 writes",
+    "model": "Qwen/Qwen2.5-0.5B",
+    "layer": "layers.0.mlp.gate_proj (first 128 outputs)",
+    "tokens": 32,
+    "K": 896,
+    "output_shape": [
+      32,
+      128
+    ]
+  }
+]

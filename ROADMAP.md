@@ -100,8 +100,9 @@ deliberately planted bugs, real model data.
 
 ### W3 - Software stack (limitation 5: the "CUDA moat")
 - [ ] Instruction set for the tile, designed together with its compiler
-- [ ] Simple compiler path: one PyTorch layer -> Imbewu instructions ->
-      simulated tile, checked against PyTorch's own answer
+- [x] Simple compiler path: one PyTorch layer -> tile commands -> simulated
+      tile -> PyTorch tensor, bit exact; real Qwen layer run
+      (`tools/imbewu_compile.py`, `make test-compile`)
 - [ ] Build on open compiler frameworks (MLIR / IREE or TVM), not from scratch
 - [ ] Goal for the pitch: a real (small) language model running end to end
       on the simulated Imbewu design
@@ -149,6 +150,9 @@ Phase 2 is under way: the tile (version 3) has double-buffered SRAM,
 weights kept across commands and fetched well ahead, overlapped memory
 transfers, and its own RISC-V control core running a C driver.
 
-Next: hide the driver's setup time, the vector unit (softmax,
-normalisation, activations), and the first step of the software stack
-(W3): turn a PyTorch layer into tile commands automatically.
+The first compiler step (W3) runs a real PyTorch layer on the simulated
+tile, bit exact. It showed FP4 weights do not yet save memory traffic in
+mixed jobs (D-020).
+
+Next: two FP4 weights per lane in mixed jobs (D-020), then the vector unit
+(softmax, normalisation, activations) and a whole transformer block.

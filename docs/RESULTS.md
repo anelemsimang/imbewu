@@ -642,3 +642,43 @@ engine's. A control core per tile is affordable.
 **Next:** start the tile while the driver is still writing commands (hide
 the setup time), the vector unit, and the first step of the software stack
 (W3): turning a PyTorch layer into these commands automatically.
+
+## 2026-11-23 - Software stack, first step (W3): PyTorch layers compiled onto the tile
+
+**What it is.** `tools/imbewu_compile.py`: a first compiler and runtime.
+`imbewu_linear(layer, x, a_fmt, w_fmt)` takes a PyTorch linear layer and a
+batch of inputs and: rounds both to MX formats; pads the sizes (tokens and
+outputs to multiples of N, inputs to multiples of 32); cuts the layer into
+tile commands that fit the SRAM halves, fetching each group of weights
+once and reusing it for every batch of tokens; lays out main memory
+(layout v3); runs the simulated tile (tile_v3, version 5 engine); and
+returns a PyTorch tensor.
+
+**Checks.** `make test-compile`: 6 random layers with awkward sizes
+(padding of tokens, outputs and inputs; 1, 4 and 16 commands; INT8, FP8,
+FP4 and mixed formats): all bit exact against the independent reference.
+
+**A real model layer.** Qwen2.5-0.5B, layer 0, `mlp.gate_proj` (first 128
+of its 4,864 outputs), 32 tokens of real WikiText-2 text, K = 896, on the
+16x16 engine: 16 commands (8 weight groups x 2 token batches).
+
+| Activations x weights | Bit exact vs reference | Error vs PyTorch FP32 | Tile |
+|---|---|---|---|
+| FP8 x FP4 | yes | 12.3% | 25,053 ticks, engine fed 57% |
+| FP8 x FP8 | yes | 5.1% | 25,053 ticks, engine fed 57% |
+
+(Errors differ from the earlier single-slice check, 3.9% and 14.2%,
+because these are different tokens and output channels.)
+
+**What this run revealed (stated honestly).** Both runs read exactly the
+same amount from main memory (22,176 words). In a mixed FP8 x FP4 job the
+hardware takes one FP4 number per 8-bit lane, so FP4 weights are stored
+and moved at the same size as FP8. The memory saving that makes FP4
+weights worthwhile for decode (the performance model's "501 -> 889 tokens
+per second") is therefore **not yet realised by the hardware**. It needs
+two FP4 weights per lane in mixed jobs, with the activation side feeding
+two elements per beat. Recorded as decision D-020.
+
+Engine use is 57% here because each weight group serves only 2 batches of
+tokens, so most of the time goes on fetching weights (memory bound, as
+expected for decode-like work).
