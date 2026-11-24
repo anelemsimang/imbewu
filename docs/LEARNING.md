@@ -318,3 +318,14 @@ way from memory and simply adds that tile to the delivery list, like
 adding a name to a group order instead of placing a second order. With one
 memory channel, four tiles became 1.8 times faster; with more channels the
 speed was already fine, but memory traffic (and so energy) still halved.
+
+## Chaining layers on the chip
+A language model is a long chain: multiply by a weight matrix, apply a
+function (SiLU, softmax, normalisation), multiply again. Before, our tile
+could only do the multiplies; software had to do the rest between them.
+Now the tile does the whole step itself: it runs the function on the
+vector unit, rounds the results back into the 8-bit blocks the engine
+reads (choosing each block's shared scale), and turns rows into columns
+(a "transpose") so the next multiply can read them directly. A "wait"
+flag on a command makes it start only once the step before it has
+finished writing.

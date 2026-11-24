@@ -177,3 +177,16 @@ few words apart. Commands get a weight-address field (w_at) so many
 commands can share one copy of their activations. Measured: 1.4x (2 tiles)
 and 1.8x (4 tiles) faster on one memory channel; memory reads halved in
 every multi-tile case.
+
+### D-023 - Post-processing stage in the tile (vector unit + MX rounding + transpose)
+The vector unit (version 1) worked on its own. To run layers back to back
+without software in between, the tile gets a post-processing stage
+between the engine and main memory: per command, store FP32 answers,
+round them into MX blocks, or run a vector-unit program and then round;
+results are written in the engine's own input layout, and a "wait" flag
+lets the next command read them. Rounding in hardware follows exactly the
+compiler's rule (so the whole-model accuracy results still hold). For now
+results pass through main memory, the simplest correct design; keeping
+them on chip is a later optimisation. Measured: bit exact on 18 chained
+runs; the vector unit becomes the slowest step for SiLU, so its speed is
+the next performance question.

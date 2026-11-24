@@ -1046,3 +1046,55 @@ shifters can be made narrower).
 **Next.** Step 2: the transpose (the engine writes one token per word, but
 reads its next input as one position of K per word, across tokens) and
 the tile's path engine -> vector unit -> converter -> next command.
+
+## 2026-11-24 - Vector unit into the tile, step 2: layers chained on one tile (tile version 4)
+
+**What was built.** `rtl/tile_v4.v` = tile version 3 plus a
+post-processing stage between the engine and main memory. Each command
+chooses what happens to its answers:
+- **store FP32** (as before);
+- **round into MX blocks** (INT8, FP8 or FP4) and store them in the exact
+  layout the engine reads as input;
+- **run a vector-unit program first** (SiLU, softmax, RMSNorm), then round
+  and store.
+
+For each token row the stage copies the row into the vector unit, runs
+the program, sends the results through the converter from step 1, and a
+transpose buffer gathers N tokens and writes them out "one column per
+word", which is what the next layer's engine expects. A command can be
+marked "wait" (dep), so it fetches its inputs only after the previous
+command's results are stored. One tile can therefore run a chain of layers
+with no software in between.
+
+**Test.** Three layers chained on one tile: (1) 8 tokens x 64 inputs ->
+32 outputs, vector-unit program, rounded to FP8; (2) reads that, -> 64
+outputs, rounded to INT8, FP8 or FP4; (3) reads that, -> 8 outputs in
+FP32. Every word is checked: both intermediate results in main memory and
+the final answers. Expected values come only from independent references
+(exact block sums, the vector unit's bit-exact emulator, the compiler's MX
+rounding). All three programs x all three middle formats, on 4x4 and 8x8
+engines, some with slow memory (one request per 3 ticks): **18 runs, all
+bit exact** (`make test-tile-v4`).
+
+**A mistake found on the way, in the test, not the chip.** The first run
+had only the final layer wrong, by exactly 64x. The engine treats an INT8
+element as code / 64 (as the MX standard says); the compiler's reference
+already allowed for that, but the new test generator did not. Fixed in
+the generator; the hardware was right.
+
+**Time (4x4, SiLU chain).** 7,819 ticks: the engine was fed on 2,304, and
+post-processing took 4,258. The vector unit does one instruction per tick
+and SiLU needs about 50 instructions per word of N numbers, so here the
+**vector unit, not memory, is now the slow part.** In this test every
+layer waits for the one before, so nothing overlaps; in a real model many
+batches of tokens are in flight, and the next command's matrix multiply
+already runs while this one is post-processed. Still, making the vector
+unit faster (more lanes, or doing exp and 1/x in one step) is now on the
+list (W4 performance model to size it).
+
+**Planted bugs.** See below.
+
+**Limits.** One vector-unit program per run (all post-processed commands
+use it); rows up to 64 words; results go through main memory to the next
+layer (keeping them in the tile's own memory is a later saving). Rows of
+softmax and RMSNorm must fit in one command (the full width of the layer).

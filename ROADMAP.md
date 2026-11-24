@@ -201,4 +201,10 @@ Broadcast works (D-022): tiles reading the same activations share one
 memory read. On one memory channel, 4 tiles are now 1.8x faster than
 without it, and memory reads halve in every multi-tile case.
 
-Next: the vector unit in the tile.
+The vector unit is inside the tile (tile version 4, D-023): a layer's
+answers can be run through SiLU, softmax or RMSNorm, rounded back into MX
+blocks in hardware and laid out for the next layer, so one tile runs a
+chain of layers with no software in between; bit exact.
+
+Next: make the vector unit faster (it is now the slowest step for SiLU),
+and keep chained results on chip instead of going through main memory.
