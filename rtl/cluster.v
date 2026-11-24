@@ -201,7 +201,7 @@ module mem_share #(
         jf_v = {T{1'b0}}; slot_rd = {B{1'b0}};
         for (j = 0; j < B; j = j + 1) slot_mask[j] = {T{1'b0}};
         for (k = 0; k < T; k = k + 1) jf_e[k] = 0;
-        g = 0; nrd = 0;
+        g = 0; nrd = 0; pos = 0; pe = 0;      // (set on every path: no latch)
         for (k = 0; k < T; k = k + 1) begin
             idx = rr + k;
             if (idx >= T) idx = idx - T;

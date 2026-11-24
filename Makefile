@@ -4,7 +4,7 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-tile-v4 mutants-tile-v4 test-cluster mutants-cluster formal mutants perf synth clean
+.PHONY: lint test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-tile-v4 mutants-tile-v4 test-cluster mutants-cluster formal mutants perf synth clean
 
 test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster
 
@@ -157,6 +157,11 @@ test-cluster:
 # planted bugs in the arbiter and broadcast (each must be caught)
 mutants-cluster:
 	tests/run_cluster_mutants.sh
+
+# Lint (Verilator) of the current designs; fails on serious findings
+# (needs Verilator: apt-get install verilator)
+lint:
+	tests/run_lint.sh
 
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)

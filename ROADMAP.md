@@ -94,7 +94,8 @@ deliberately planted bugs, real model data.
       grid's sums (equivalence checking)
 - [ ] Coverage measurement: report which parts of each design the tests reached
 - [ ] Assertions inside the designs, checked during every simulation
-- [ ] Lint checks (Verilator) on every design, run by `make test`
+- [x] Lint checks (Verilator) on every current design (`make lint`): one
+      accidental latch and one silent-overflow risk found and fixed
 - [ ] One command that re-runs every test after every change
 - [ ] Gate-level simulation: re-run the tests on the circuit after synthesis
       (catches differences between the design and what the tools built)

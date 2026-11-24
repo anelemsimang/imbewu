@@ -331,6 +331,18 @@ module tile_v4 #(
                 if (busy && npost < ncomp) begin
                     if (f_pmode(cmds[npost[3:0]]) == 2'd0) npost <= npost + 1;    // nothing to do
                     else if (nst == npost) begin
+`ifndef SYNTHESIS
+                        // the stated limits (header): checked in simulation, so a
+                        // command that breaks them stops the run instead of
+                        // silently losing data
+                        if (f_nt(cmds[npost[3:0]]) > 64 || (f_nt(cmds[npost[3:0]]) * N) % 32 != 0 ||
+                            f_mt(cmds[npost[3:0]]) * (f_nt(cmds[npost[3:0]]) * N + f_nt(cmds[npost[3:0]]) * N / 32)
+                                > 2 * (1 << SAW) + 64) begin
+                            $display("tile_v4 ERROR: command %0d breaks the post-processing limits (nt %0d, mt %0d)",
+                                     npost, f_nt(cmds[npost[3:0]]), f_mt(cmds[npost[3:0]]));
+                            $finish;
+                        end
+`endif
                         pcmd    <= cmds[npost[3:0]];
                         phalf   <= npost[0];
                         q_fmt   <= f_pfmt(cmds[npost[3:0]]);

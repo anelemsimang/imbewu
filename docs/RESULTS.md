@@ -1276,3 +1276,38 @@ defects).
 **Limits.** Real defects cluster and some faults are not "a tile works or
 not" (timing, leakage); both lower yield further. The numbers are for
 choosing a design, not for pricing.
+
+## 2026-11-24 - Lint check of every current design (W1)
+
+**What was done.** Verilator (free, version 5.020) reads the hardware code
+looking for mistakes simulation can miss. All current designs: the engine,
+the tile (version 4, with the vector unit and converter), the cluster with
+its arbiter, both vector units and the converter. `make lint` (in
+`tests/run_lint.sh`) fails on serious findings: latches built by accident,
+signals driven from two places, missing or misconnected parts, errors.
+
+**Found and fixed.**
+1. **An accidental latch in the arbiter** (`rtl/cluster.v`): two temporary
+   values in the read-joining logic were not set on every path, so a
+   synthesis tool would build small memories (latches) for them. Harmless
+   in simulation, but real hardware it was never meant to have. Fixed by
+   setting them first; the lint check flags both latches if the fix is
+   removed.
+2. **A silent-overflow risk in tile version 4**: the post-processing
+   output buffer holds 2,112 words, and nothing checked that a command's
+   output fits, or that it keeps the stated limits (rows up to 64 words,
+   whole blocks of 32). Such a command would have lost data silently. Now
+   simulation stops with an error naming the command; checked with a
+   deliberately oversized command. (On a real chip the compiler must keep
+   to these limits; recorded for the compiler.)
+
+**Reviewed and kept.** About 230 warnings in total across the four runs, mostly width changes:
+narrower numbers widened on purpose, and 44 places where a value is cut to
+a narrower width. Each cut in the current designs was checked by hand
+against the range of values it can hold (for example the converter's
+exponent field, the 1/x correction, the arbiter's tile numbers); none can
+lose bits within the design's stated limits. Also "circular logic" notes
+on the vector unit's lane-sum tree, which are a known Verilator false
+alarm for a tree stored as one array.
+
+After the fixes: all cluster and tile version 4 tests pass again (below).
