@@ -924,8 +924,10 @@ All answers bit exact in all five runs.
    about 3,170) and so speed up the memory-limited case by about 2x.
 
 **Planted bugs.** The arbiter was deliberately broken in two ways (answer
-sent to the wrong tile; one more grant per tick than memory has channels):
-see the result below.
+sent to the wrong tile; one more grant per tick than memory has channels).
+Both were caught (`tests/run_cluster_mutants.sh`): in each case a tile
+waits for an answer that never arrives, and the test reports the cluster
+stuck.
 
 **Limits.** Memory here is an ideal delay with B independent channels; a
 real HBM model (banks, refresh, row hits and misses) comes later in
