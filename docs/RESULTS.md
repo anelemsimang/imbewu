@@ -1168,3 +1168,37 @@ constant-operand instructions using a register instead): see
 **Limits.** Each new instruction is still one long tick; a real chip
 would spread 2^x and 1/x over a few ticks (pipelining). Size not yet
 estimated (each lane gains two small tables and a few multipliers).
+
+## 2026-11-24 - Performance model now counts the vector unit (W4)
+
+`tools/perf_model.py` now includes the vector unit's time (one per engine,
+N lanes, instruction counts measured from the real programs), next to
+compute, memory and links; prefill at 32k tokens was added. Same assumed
+concept chip as before (256 engines of 32x32, 1.5 GHz, 4 TB/s HBM). FP8
+weights and activations, tokens per second for the whole system:
+
+| Model | Chips | Step | Vector unit v1 | Vector unit v2 |
+|---|---|---|---|---|
+| 8B-class | 1 | prefill 4k | 48,821 (compute) | 48,821 (compute) |
+| 8B-class | 1 | prefill 32k | **8,750 (vector unit)** | **25,256 (compute)** |
+| 8B-class | 1 | decode, batch 64 | 10,280 (memory) | 10,280 (memory) |
+| 70B-class | 1 | prefill 32k | **1,750 (vector unit)** | **3,530 (compute)** |
+| 70B-class | 4 | prefill 32k | **7,000 (vector unit)** | **14,119 (compute)** |
+| 70B-class | 4 | decode, batch 64 | 8,936 (memory) | 8,936 (memory) |
+
+(In brackets: what limits the step.)
+
+**What it shows.**
+1. With version 1, reading long prompts would have been limited by the
+   vector unit (softmax over 32k scores per token), at a third (8B) to
+   half (70B) of the engine's speed. With version 2 the engine sets the
+   pace again; the vector unit needs 54-78% of the engine's time there.
+2. Generating text (decode) is limited by memory in every case, as the
+   community reading predicted; the vector unit does not matter there.
+   So the next performance gains for decode come from memory (bandwidth,
+   broadcast across tiles, more queries per weight read), not compute.
+3. At 32k context the vector unit is again within a factor of 2 of the
+   engine; for 128k-token contexts it would be the limit again. Recorded as
+   a known limit; softmax's share grows with context length.
+
+Generated tables: `results/perf_model.md`. Roofline model: optimistic.

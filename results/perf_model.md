@@ -6,60 +6,152 @@ All chip numbers are assumptions for a concept chip. Roofline model: optimistic.
 |---|---|---|---|---|---|---|
 | imbewu-c1-v3 | 786 | 1573 | 4.0 | 96 | 800 | assumed: 256 engines of 32x32, 1.5 GHz, 4 HBM3E stacks |
 | imbewu-c1-v4 | 786 | 1573 | 4.0 | 96 | 800 | as above, version 4 engine: sums MX blocks inside into FP32 (built, simulated) |
+| imbewu-c1-vu1 | 786 | 1573 | 4.0 | 96 | 800 | as above, plus the vector unit's time (v1: exp and 1/x in software), one per engine |
+| imbewu-c1-vu2 | 786 | 1573 | 4.0 | 96 | 800 | as above, vector unit v2 (one-instruction 2^x and 1/x; built, simulated) |
 
-| Chip | Model | Chips | W/A | Phase | Tokens/s (total) | ms/step | Limited by | Engine use (weight layers) | Fits in memory |
-|---|---|---|---|---|---|---|---|---|---|
-| imbewu-c1-v3 | 8B-class | 1 | fp8/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp8/fp8 | decode b=1 | 501 | 1.998 | memory | 3% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp8/fp8 | decode b=64 | 10,280 | 6.226 | memory | 98% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp4/fp4 | prefill 4k | 48,821 | 83.898 | compute | 50% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp4/fp4 | decode b=1 | 889 | 1.125 | memory | 2% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp4/fp4 | decode b=64 | 11,955 | 5.353 | memory | 49% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp4/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp4/fp8 | decode b=1 | 889 | 1.125 | memory | 3% | yes |
-| imbewu-c1-v3 | 8B-class | 1 | fp4/fp8 | decode b=64 | 11,955 | 5.353 | memory | 98% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp8/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp8/fp8 | decode b=1 | 55 | 18.078 | memory | 3% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp8/fp8 | decode b=64 | 2,234 | 28.648 | memory | 99% | NO |
-| imbewu-c1-v3 | 70B-class | 1 | fp4/fp4 | prefill 4k | 5,326 | 768.986 | compute | 50% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp4/fp4 | decode b=1 | 105 | 9.522 | memory | 2% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp4/fp4 | decode b=64 | 3,185 | 20.091 | memory | 50% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp4/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp4/fp8 | decode b=1 | 105 | 9.522 | memory | 3% | yes |
-| imbewu-c1-v3 | 70B-class | 1 | fp4/fp8 | decode b=64 | 3,185 | 20.091 | memory | 99% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp8/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp8/fp8 | decode b=1 | 221 | 4.519 | memory | 3% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp8/fp8 | decode b=64 | 8,936 | 7.162 | memory | 96% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp4/fp4 | prefill 4k | 21,303 | 192.27 | compute | 50% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp4/fp4 | decode b=1 | 420 | 2.38 | memory | 2% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp4/fp4 | decode b=64 | 12,742 | 5.023 | memory | 48% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp4/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp4/fp8 | decode b=1 | 420 | 2.38 | memory | 3% | yes |
-| imbewu-c1-v3 | 70B-class | 4 | fp4/fp8 | decode b=64 | 12,742 | 5.023 | memory | 96% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp8/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp8/fp8 | decode b=1 | 501 | 1.998 | memory | 3% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp8/fp8 | decode b=64 | 10,280 | 6.226 | memory | 94% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp4/fp4 | prefill 4k | 86,145 | 47.548 | compute | 100% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp4/fp4 | decode b=1 | 889 | 1.125 | memory | 3% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp4/fp4 | decode b=64 | 11,955 | 5.353 | memory | 92% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp4/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp4/fp8 | decode b=1 | 889 | 1.125 | memory | 3% | yes |
-| imbewu-c1-v4 | 8B-class | 1 | fp4/fp8 | decode b=64 | 11,955 | 5.353 | memory | 94% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp8/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp8/fp8 | decode b=1 | 55 | 18.078 | memory | 3% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp8/fp8 | decode b=64 | 2,234 | 28.648 | memory | 99% | NO |
-| imbewu-c1-v4 | 70B-class | 1 | fp4/fp4 | prefill 4k | 9,930 | 412.471 | compute | 100% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp4/fp4 | decode b=1 | 105 | 9.522 | memory | 3% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp4/fp4 | decode b=64 | 3,185 | 20.091 | memory | 98% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp4/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp4/fp8 | decode b=1 | 105 | 9.522 | memory | 3% | yes |
-| imbewu-c1-v4 | 70B-class | 1 | fp4/fp8 | decode b=64 | 3,185 | 20.091 | memory | 99% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp8/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp8/fp8 | decode b=1 | 221 | 4.519 | memory | 3% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp8/fp8 | decode b=64 | 8,936 | 7.162 | memory | 93% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp4/fp4 | prefill 4k | 39,713 | 103.141 | compute | 100% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp4/fp4 | decode b=1 | 420 | 2.38 | memory | 3% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp4/fp4 | decode b=64 | 12,742 | 5.023 | memory | 90% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp4/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp4/fp8 | decode b=1 | 420 | 2.38 | memory | 3% | yes |
-| imbewu-c1-v4 | 70B-class | 4 | fp4/fp8 | decode b=64 | 12,742 | 5.023 | memory | 93% | yes |
+| Chip | Model | Chips | W/A | Phase | Tokens/s (total) | ms/step | Limited by | Engine use (weight layers) | Vector unit time / engine time | Fits in memory |
+|---|---|---|---|---|---|---|---|---|---|---|
+| imbewu-c1-v3 | 8B-class | 1 | fp8/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp8/fp8 | prefill 32k | 25,256 | 1297.45 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp8/fp8 | decode b=1 | 501 | 1.998 | memory | 3% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp8/fp8 | decode b=64 | 10,280 | 6.226 | memory | 98% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp4 | prefill 4k | 48,821 | 83.898 | compute | 50% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp4 | prefill 32k | 25,256 | 1297.45 | compute | 50% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp4 | decode b=1 | 889 | 1.125 | memory | 2% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp4 | decode b=64 | 11,955 | 5.353 | memory | 49% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp8 | prefill 32k | 25,256 | 1297.45 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp8 | decode b=1 | 889 | 1.125 | memory | 3% | - | yes |
+| imbewu-c1-v3 | 8B-class | 1 | fp4/fp8 | decode b=64 | 11,955 | 5.353 | memory | 98% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp8/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp8/fp8 | prefill 32k | 3,530 | 9283.424 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp8/fp8 | decode b=1 | 55 | 18.078 | memory | 3% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp8/fp8 | decode b=64 | 2,234 | 28.648 | memory | 99% | - | NO |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp4 | prefill 4k | 5,326 | 768.986 | compute | 50% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp4 | prefill 32k | 3,530 | 9283.424 | compute | 50% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp4 | decode b=1 | 105 | 9.522 | memory | 2% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp4 | decode b=64 | 3,185 | 20.091 | memory | 50% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp8 | prefill 32k | 3,530 | 9283.424 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp8 | decode b=1 | 105 | 9.522 | memory | 3% | - | yes |
+| imbewu-c1-v3 | 70B-class | 1 | fp4/fp8 | decode b=64 | 3,185 | 20.091 | memory | 99% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp8/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp8/fp8 | prefill 32k | 14,119 | 2320.879 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp8/fp8 | decode b=1 | 221 | 4.519 | memory | 3% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp8/fp8 | decode b=64 | 8,936 | 7.162 | memory | 96% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp4 | prefill 4k | 21,303 | 192.27 | compute | 50% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp4 | prefill 32k | 14,119 | 2320.879 | compute | 50% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp4 | decode b=1 | 420 | 2.38 | memory | 2% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp4 | decode b=64 | 12,742 | 5.023 | memory | 48% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp8 | prefill 32k | 14,119 | 2320.879 | compute | 100% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp8 | decode b=1 | 420 | 2.38 | memory | 3% | - | yes |
+| imbewu-c1-v3 | 70B-class | 4 | fp4/fp8 | decode b=64 | 12,742 | 5.023 | memory | 96% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp8/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp8/fp8 | prefill 32k | 25,256 | 1297.45 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp8/fp8 | decode b=1 | 501 | 1.998 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp8/fp8 | decode b=64 | 10,280 | 6.226 | memory | 94% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp4 | prefill 4k | 86,145 | 47.548 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp4 | prefill 32k | 32,552 | 1006.645 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp4 | decode b=1 | 889 | 1.125 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp4 | decode b=64 | 11,955 | 5.353 | memory | 92% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp8 | prefill 32k | 25,256 | 1297.45 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp8 | decode b=1 | 889 | 1.125 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 8B-class | 1 | fp4/fp8 | decode b=64 | 11,955 | 5.353 | memory | 94% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp8/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp8/fp8 | prefill 32k | 3,530 | 9283.424 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp8/fp8 | decode b=1 | 55 | 18.078 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp8/fp8 | decode b=64 | 2,234 | 28.648 | memory | 99% | - | NO |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp4 | prefill 4k | 9,930 | 412.471 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp4 | prefill 32k | 5,095 | 6431.297 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp4 | decode b=1 | 105 | 9.522 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp4 | decode b=64 | 3,185 | 20.091 | memory | 98% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp8 | prefill 32k | 3,530 | 9283.424 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp8 | decode b=1 | 105 | 9.522 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 70B-class | 1 | fp4/fp8 | decode b=64 | 3,185 | 20.091 | memory | 99% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp8/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp8/fp8 | prefill 32k | 14,119 | 2320.879 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp8/fp8 | decode b=1 | 221 | 4.519 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp8/fp8 | decode b=64 | 8,936 | 7.162 | memory | 93% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp4 | prefill 4k | 39,713 | 103.141 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp4 | prefill 32k | 20,380 | 1607.847 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp4 | decode b=1 | 420 | 2.38 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp4 | decode b=64 | 12,742 | 5.023 | memory | 90% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp8 | prefill 32k | 14,119 | 2320.879 | compute | 100% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp8 | decode b=1 | 420 | 2.38 | memory | 3% | - | yes |
+| imbewu-c1-v4 | 70B-class | 4 | fp4/fp8 | decode b=64 | 12,742 | 5.023 | memory | 93% | - | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp8/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | 80% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp8/fp8 | prefill 32k | 8,750 | 3744.989 | vector unit | 100% | 289% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp8/fp8 | decode b=1 | 501 | 1.998 | memory | 3% | 2% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp8/fp8 | decode b=64 | 10,280 | 6.226 | memory | 94% | 40% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp4 | prefill 4k | 61,254 | 66.869 | vector unit | 100% | 141% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp4 | prefill 32k | 8,750 | 3744.989 | vector unit | 100% | 372% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp4 | decode b=1 | 889 | 1.125 | memory | 3% | 5% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp4 | decode b=64 | 11,955 | 5.353 | memory | 92% | 52% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | 80% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp8 | prefill 32k | 8,750 | 3744.989 | vector unit | 100% | 289% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp8 | decode b=1 | 889 | 1.125 | memory | 3% | 2% | yes |
+| imbewu-c1-vu1 | 8B-class | 1 | fp4/fp8 | decode b=64 | 11,955 | 5.353 | memory | 94% | 40% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp8/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | 44% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp8/fp8 | prefill 32k | 1,750 | 18723.635 | vector unit | 100% | 202% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp8/fp8 | decode b=1 | 55 | 18.078 | memory | 3% | 1% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp8/fp8 | decode b=64 | 2,234 | 28.648 | memory | 99% | 36% | NO |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp4 | prefill 4k | 9,930 | 412.471 | compute | 100% | 81% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp4 | prefill 32k | 1,750 | 18723.635 | vector unit | 100% | 291% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp4 | decode b=1 | 105 | 9.522 | memory | 3% | 3% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp4 | decode b=64 | 3,185 | 20.091 | memory | 98% | 57% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | 44% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp8 | prefill 32k | 1,750 | 18723.635 | vector unit | 100% | 202% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp8 | decode b=1 | 105 | 9.522 | memory | 3% | 1% | yes |
+| imbewu-c1-vu1 | 70B-class | 1 | fp4/fp8 | decode b=64 | 3,185 | 20.091 | memory | 99% | 36% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp8/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | 44% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp8/fp8 | prefill 32k | 7,000 | 4680.909 | vector unit | 100% | 202% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp8/fp8 | decode b=1 | 221 | 4.519 | memory | 3% | 1% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp8/fp8 | decode b=64 | 8,936 | 7.162 | memory | 93% | 33% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp4 | prefill 4k | 39,713 | 103.141 | compute | 100% | 81% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp4 | prefill 32k | 7,000 | 4680.909 | vector unit | 100% | 291% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp4 | decode b=1 | 420 | 2.38 | memory | 3% | 3% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp4 | decode b=64 | 12,742 | 5.023 | memory | 90% | 54% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | 44% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp8 | prefill 32k | 7,000 | 4680.909 | vector unit | 100% | 202% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp8 | decode b=1 | 420 | 2.38 | memory | 3% | 1% | yes |
+| imbewu-c1-vu1 | 70B-class | 4 | fp4/fp8 | decode b=64 | 12,742 | 5.023 | memory | 93% | 33% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp8/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | 22% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp8/fp8 | prefill 32k | 25,256 | 1297.45 | compute | 100% | 78% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp8/fp8 | decode b=1 | 501 | 1.998 | memory | 3% | 1% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp8/fp8 | decode b=64 | 10,280 | 6.226 | memory | 94% | 11% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp4 | prefill 4k | 86,145 | 47.548 | compute | 100% | 39% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp4 | prefill 32k | 32,507 | 1008.031 | vector unit | 100% | 100% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp4 | decode b=1 | 889 | 1.125 | memory | 3% | 1% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp4 | decode b=64 | 11,955 | 5.353 | memory | 92% | 14% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp8 | prefill 4k | 48,821 | 83.898 | compute | 100% | 22% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp8 | prefill 32k | 25,256 | 1297.45 | compute | 100% | 78% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp8 | decode b=1 | 889 | 1.125 | memory | 3% | 1% | yes |
+| imbewu-c1-vu2 | 8B-class | 1 | fp4/fp8 | decode b=64 | 11,955 | 5.353 | memory | 94% | 11% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp8/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | 12% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp8/fp8 | prefill 32k | 3,530 | 9283.424 | compute | 100% | 54% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp8/fp8 | decode b=1 | 55 | 18.078 | memory | 3% | 0% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp8/fp8 | decode b=64 | 2,234 | 28.648 | memory | 99% | 10% | NO |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp4 | prefill 4k | 9,930 | 412.471 | compute | 100% | 22% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp4 | prefill 32k | 5,095 | 6431.297 | compute | 100% | 78% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp4 | decode b=1 | 105 | 9.522 | memory | 3% | 1% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp4 | decode b=64 | 3,185 | 20.091 | memory | 98% | 16% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp8 | prefill 4k | 5,326 | 768.986 | compute | 100% | 12% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp8 | prefill 32k | 3,530 | 9283.424 | compute | 100% | 54% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp8 | decode b=1 | 105 | 9.522 | memory | 3% | 0% | yes |
+| imbewu-c1-vu2 | 70B-class | 1 | fp4/fp8 | decode b=64 | 3,185 | 20.091 | memory | 99% | 10% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp8/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | 12% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp8/fp8 | prefill 32k | 14,119 | 2320.879 | compute | 100% | 54% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp8/fp8 | decode b=1 | 221 | 4.519 | memory | 3% | 0% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp8/fp8 | decode b=64 | 8,936 | 7.162 | memory | 93% | 9% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp4 | prefill 4k | 39,713 | 103.141 | compute | 100% | 22% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp4 | prefill 32k | 20,380 | 1607.847 | compute | 100% | 78% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp4 | decode b=1 | 420 | 2.38 | memory | 3% | 1% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp4 | decode b=64 | 12,742 | 5.023 | memory | 90% | 15% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp8 | prefill 4k | 21,303 | 192.27 | compute | 100% | 12% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp8 | prefill 32k | 14,119 | 2320.879 | compute | 100% | 54% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp8 | decode b=1 | 420 | 2.38 | memory | 3% | 0% | yes |
+| imbewu-c1-vu2 | 70B-class | 4 | fp4/fp8 | decode b=64 | 12,742 | 5.023 | memory | 93% | 9% | yes |

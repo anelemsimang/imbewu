@@ -29,6 +29,7 @@ import sys
 from dataclasses import asdict, dataclass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 BLOCK = 32                      # MX block size
 BITS = {"fp8": 8, "int8": 8, "fp4": 4, "bf16": 16}
 PER_LANE = {"fp8": 1, "int8": 1, "fp4": 2}     # multiplies per cell per tick
@@ -56,6 +57,7 @@ class Chip:
     link_gbps: float        # chip-to-chip bandwidth per chip, GB/s (one direction)
     cross_block: bool       # True: engine sums many MX blocks inside (planned v4)
     note: str = ""
+    vu: int = 0             # vector unit version (1 or 2) to count its time; 0 = not counted
 
     def peak_tflops(self, fmt):
         return 2 * self.engines * self.N ** 2 * PER_LANE[fmt] * self.clock_ghz / 1e3
@@ -126,6 +128,12 @@ CHIPS = {
     "imbewu-c1-v4": Chip("Imbewu C1, version 4 engine", engines=256, N=32, clock_ghz=1.5,
                          hbm_tbps=4.0, hbm_gb=96, link_gbps=800, cross_block=True,
                          note="as above, version 4 engine: sums MX blocks inside into FP32 (built, simulated)"),
+    "imbewu-c1-vu1": Chip("Imbewu C1, engine v4+ with vector unit v1", engines=256, N=32, clock_ghz=1.5,
+                          hbm_tbps=4.0, hbm_gb=96, link_gbps=800, cross_block=True, vu=1,
+                          note="as above, plus the vector unit's time (v1: exp and 1/x in software), one per engine"),
+    "imbewu-c1-vu2": Chip("Imbewu C1, engine v4+ with vector unit v2", engines=256, N=32, clock_ghz=1.5,
+                          hbm_tbps=4.0, hbm_gb=96, link_gbps=800, cross_block=True, vu=2,
+                          note="as above, vector unit v2 (one-instruction 2^x and 1/x; built, simulated)"),
 }
 
 
@@ -152,6 +160,20 @@ def step_time(chip, model, tokens, ctx, w_fmt, a_fmt, tp, batch):
     comp += t1 + t2
     comp *= model.layers
 
+    # vector unit: one per engine, N lanes, one instruction per tick; cost per
+    # vector of N numbers counted from the real programs (tools/vu_budget.py).
+    # It runs alongside the engine (as in tile_v4), so it limits the step
+    # only if it needs longer than the engine.
+    vu = 0.0
+    if chip.vu:
+        from vu_budget import measured_costs
+        cost = measured_costs(chip.vu)
+        numbers = dict(silu=model.ffn, gate_mul=model.ffn, rmsnorm=2 * model.d,
+                       softmax=model.heads * ctx, rope=(model.heads + model.kv_heads) * hd,
+                       residual=2 * model.d)
+        instr = sum(numbers[k] / chip.N * cost[k] for k in numbers) * M / tp
+        vu = model.layers * instr / chip.engines / (chip.clock_ghz * 1e9)
+
     wbytes = sum(k * n for k, n in model.linears()) * model.layers / tp
     wbytes *= (BITS[w_fmt] + 8 / BLOCK) / 8                   # plus one scale per block
     wbytes += model.vocab * model.d * 1 / tp                   # output layer in FP8
@@ -163,9 +185,9 @@ def step_time(chip, model, tokens, ctx, w_fmt, a_fmt, tp, batch):
     if tp > 1:
         per_ar = 2 * (tp - 1) / tp * M * model.d * 2
         link = 2 * model.layers * per_ar / (chip.link_gbps * 1e9)
-    total = max(comp, mem, link)
-    bound = {comp: "compute", mem: "memory", link: "links"}[total]
-    return dict(compute_s=comp, memory_s=mem, link_s=link, total_s=total, bound=bound,
+    total = max(comp, vu, mem, link)
+    bound = {link: "links", mem: "memory", vu: "vector unit", comp: "compute"}[total]
+    return dict(compute_s=comp, vu_s=vu, memory_s=mem, link_s=link, total_s=total, bound=bound,
                 engine_util=sum(utils) / len(utils), weights_gb=wbytes / 1e9, kv_gb=kv / 1e9)
 
 
@@ -175,13 +197,14 @@ def study():
         for mk, tp in (("8B-class", 1), ("70B-class", 1), ("70B-class", 4)):
             model = MODELS[mk]
             for w, a in (("fp8", "fp8"), ("fp4", "fp4"), ("fp4", "fp8")):
-                for phase, tokens, batch in (("prefill 4k", 4096, 1),
+                for phase, tokens, batch in (("prefill 4k", 4096, 1), ("prefill 32k", 32768, 1),
                                               ("decode b=1", 1, 1),
                                               ("decode b=64", 1, 64)):
-                    r = step_time(chip, model, tokens, 4096, w, a, tp, batch)
+                    r = step_time(chip, model, tokens, max(4096, tokens), w, a, tp, batch)
                     fits = (r["weights_gb"] + r["kv_gb"]) <= chip.hbm_gb
                     toks = tokens * batch / r["total_s"]
                     rows.append(dict(chip=ck, model=mk, chips=tp, weights=w, acts=a,
+                                     vu_share=round(r["vu_s"] / r["compute_s"], 3),
                                      phase=phase, tokens_per_s=round(toks),
                                      ms_per_step=round(1e3 * r["total_s"], 3),
                                      bound=r["bound"], engine_util=round(r["engine_util"], 3),
@@ -190,12 +213,13 @@ def study():
 
 
 def write_report(rows, out_md, out_json):
-    lines = ["| Chip | Model | Chips | W/A | Phase | Tokens/s (total) | ms/step | Limited by | Engine use (weight layers) | Fits in memory |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+    lines = ["| Chip | Model | Chips | W/A | Phase | Tokens/s (total) | ms/step | Limited by | Engine use (weight layers) | Vector unit time / engine time | Fits in memory |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         lines.append(f"| {r['chip']} | {r['model']} | {r['chips']} | {r['weights']}/{r['acts']} | "
                      f"{r['phase']} | {r['tokens_per_s']:,} | {r['ms_per_step']} | {r['bound']} | "
-                     f"{100 * r['engine_util']:.0f}% | {'yes' if r['fits_memory'] else 'NO'} |")
+                     f"{100 * r['engine_util']:.0f}% | {'-' if not CHIPS[r['chip']].vu else f"{100 * r['vu_share']:.0f}%"} | "
+                     f"{'yes' if r['fits_memory'] else 'NO'} |")
     peaks = ["| Chip | FP8 peak TFLOPS | FP4 peak TFLOPS | HBM TB/s | HBM GB | Links GB/s | Assumptions |",
              "|---|---|---|---|---|---|---|"]
     for ck, c in CHIPS.items():
