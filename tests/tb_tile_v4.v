@@ -40,21 +40,26 @@ module tb_tile_v4;
     reg [W8-1:0] mem [0:(1<<EAW)-1];
     integer lat = 20, every = 1, cyc = 0, reads = 0, writes = 0;
     assign mem_ready = (cyc % every) == 0;
-    reg [W8-1:0] pipe_d [0:255];
-    reg          pipe_v [0:255];
+    // answers wait in a ring of 256 slots: a read accepted at tick c is
+    // handed back at tick c + lat (same timing as a shift register of lat)
+    reg [W8-1:0] ring_d [0:255];
+    reg          ring_v [0:255];
     integer q;
     always @(posedge clk) begin
         cyc <= cyc + 1;
-        for (q = 255; q > 0; q = q - 1) begin pipe_d[q] <= pipe_d[q-1]; pipe_v[q] <= pipe_v[q-1]; end
-        pipe_v[0] <= 1'b0;
+        mem_rvalid <= ring_v[cyc % 256];
+        mem_rdata  <= ring_d[cyc % 256];
+        ring_v[cyc % 256] = 1'b0;
         if (mem_req && mem_ready) begin
             if (mem_we) begin mem[mem_addr] <= mem_wdata; writes = writes + 1; end
-            else begin pipe_d[0] <= mem[mem_addr]; pipe_v[0] <= 1'b1; reads = reads + 1; end
+            else begin
+                ring_d[(cyc + lat) % 256] = mem[mem_addr];
+                ring_v[(cyc + lat) % 256] = 1'b1;
+                reads = reads + 1;
+            end
         end
-        mem_rvalid <= pipe_v[lat - 1];
-        mem_rdata  <= pipe_d[lat - 1];
     end
-    initial for (q = 0; q < 256; q = q + 1) pipe_v[q] = 0;
+    initial for (q = 0; q < 256; q = q + 1) ring_v[q] = 0;
 
     // ---- the test --------------------------------------------------------------
     reg [223:0] cmds [0:15];

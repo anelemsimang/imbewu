@@ -295,6 +295,9 @@ module tile_v4 #(
             ticks_busy <= 0; ticks_engine <= 0;
             npost <= 0; posting <= 1'b0; pstate <= PS_IDLE; vu_start <= 1'b0; p_vwe <= 1'b0;
             q_iv <= 1'b0; fv <= 1'b0; ticks_post <= 0;
+            // counters of the post stage start defined (found by gate-level
+            // simulation: an unset counter there never settles)
+            pr <= 0; pw <= 0; fi <= 0; pe <= 0; qrow <= 0; qword <= 0; qblk <= 0; pi <= 0;
         end else begin
             if (start && !busy) begin
                 busy <= 1'b1; nld <= 0; ncomp <= 0; nst <= 0; computing <= 1'b0;
