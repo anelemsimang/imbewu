@@ -141,10 +141,12 @@ deliberately planted bugs, real model data.
       reasoning models that think longer (G4)
 - [ ] Power model: performance per watt and per rand, at chip and data-centre scale (G5)
 - [ ] Honest comparison with existing chips on all five goals
-- [ ] Architecture document for engineers and reviewers
+- [x] Architecture document, first version (`docs/ARCHITECTURE.md` links to it):
+      evidence, limits, roadmap and needs, written for funders and reviewers
 - [ ] External human review completed and its findings addressed (W5)
-- [ ] Clear statement in every pitch document: simulation proves the
+- [x] Clear statement in every pitch document: simulation proves the
       architecture works; it does not prove the chip is ready to manufacture
+      (in the architecture document)
 - [ ] Pitch deck, cost-to-silicon plan, team plan, design-vs-buy list
 - [ ] Optional, founder to decide: a small piece of the Imbewu tile on real silicon
       (Tiny Tapeout or wafer.space), only as proof for funders that we can deliver
@@ -177,5 +179,7 @@ whole model with FP8 weights.
 The split is in the compiler and bit exact on the simulated tile with real
 model data.
 
-Next: connect the vector unit to the tile, so a whole attention block
-(scores, softmax, weighted sum) runs on the simulated hardware.
+The architecture document (pitch package part 1) is written.
+
+Next: the multi-tile simulation (Phase 3, goal G2): several tiles sharing
+main memory and working on one model layer. Then the vector unit in the tile.
