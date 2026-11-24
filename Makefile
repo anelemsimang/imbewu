@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-cluster mutants-cluster formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-tile-v4 mutants-tile-v4 test-cluster mutants-cluster formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-cluster
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -133,6 +133,13 @@ test-fp32ops:
 
 test-vu:
 	python3 tests/run_vu_tests.py
+
+# Tile version 4: vector unit inside the tile, layers chained (step 2)
+test-tile-v4:
+	tests/run_tile_v4_tests.sh
+
+mutants-tile-v4:
+	tests/run_tile_v4_mutants.sh
 
 # FP32 -> MX block converter (vector unit results back into engine formats)
 test-mxq:
