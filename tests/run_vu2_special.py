@@ -15,8 +15,9 @@ from vu_asm import OPS, bits, ex2_bits, rcp_bits      # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 OUT = os.path.join(ROOT, "build", "vu2s")
-L = 16
+L = int(os.environ.get("IMBEWU_LANES", "16"))
 VU2 = os.environ.get("IMBEWU_VU2", "rtl/vu_v2.v")
+SIM = os.environ.get("IMBEWU_SIM")        # a simulation built elsewhere (e.g. the gate-level one)
 
 
 def edge_values():
@@ -34,8 +35,8 @@ def main():
     rounds = int(sys.argv[1]) if len(sys.argv) > 1 else 6
     assert rounds * 64 * L >= len(edge_values()), "too few rounds for all edge cases"
     os.makedirs(OUT, exist_ok=True)
-    sim = os.path.join(OUT, "tb")
-    subprocess.run(["iverilog", "-g2012", f"-DLANES={L}", "-DVU_V2", "-I", os.path.join(ROOT, "rtl"), "-o", sim] +
+    sim = SIM or os.path.join(OUT, "tb")
+    SIM or subprocess.run(["iverilog", "-g2012", f"-DLANES={L}", "-DVU_V2", "-I", os.path.join(ROOT, "rtl"), "-o", sim] +
                    [os.path.join(ROOT, f) for f in ("rtl/fp32_add_fx.v", "rtl/fp32_ops.v", VU2, "tests/tb_vu.v")],
                    check=True)
     rng = np.random.default_rng(7)

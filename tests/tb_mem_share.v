@@ -36,7 +36,11 @@ module tb_mem_share;
     reg  [B-1:0]     m_rvalid = 0;
     reg  [B*W8-1:0]  m_rdata = 0;
 
+`ifdef GATE
+    mem_share dut (                   // gate-level netlist: settings fixed at synthesis
+`else
     mem_share #(.N(N), .T(T), .B(B), .EAW(EAW), .BC(`BCAST)) dut (
+`endif
         .clk(clk), .rst(rst), .rr(rr),
         .t_req(t_req), .t_we(t_we), .t_addr(t_addr), .t_wdata(t_wdata), .t_ready(t_ready),
         .t_rvalid(t_rvalid), .t_rdata(t_rdata),

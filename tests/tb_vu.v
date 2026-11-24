@@ -13,11 +13,14 @@ module tb_vu;
     reg [31:0] imem_data = 0, cmem_data = 0; reg [L*32-1:0] vmem_wdata = 0;
     wire [L*32-1:0] vmem_rdata;
     wire busy; wire [15:0] ticks;
-`ifdef VU_V2
+`ifdef GATE
+    vu_v2 dut (                       // gate-level netlist: settings fixed at synthesis
+`elsif VU_V2
     vu_v2 #(.L(L)) dut (
 `else
     vu_v1 #(.L(L)) dut (
-`endif.clk(clk), .rst(rst), .imem_we(imem_we), .imem_addr(imem_addr),
+`endif
+        .clk(clk), .rst(rst), .imem_we(imem_we), .imem_addr(imem_addr),
         .imem_data(imem_data), .cmem_we(cmem_we), .cmem_addr(cmem_addr), .cmem_data(cmem_data),
         .vmem_we(vmem_we), .vmem_addr(vmem_addr), .vmem_wdata(vmem_wdata), .vmem_rdata(vmem_rdata),
         .start(start), .busy(busy), .ticks(ticks));
