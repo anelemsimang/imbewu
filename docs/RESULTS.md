@@ -1335,3 +1335,47 @@ needs the delays from layout (W2). Only the 4x4 engine (larger sizes take
 long to simulate as gates); the tile, cluster and vector unit not yet (the
 tile is mostly memory, which a real chip builds from the foundry's memory
 blocks).
+
+## 2026-11-24 - Gate level, step 2: the arbiter, the vector unit and the whole tile
+
+**What was done.** The remaining current designs were turned into gates
+by Yosys and their own tests run on the gates (`FULL=1 make gate`):
+
+| Design (as gates) | Size (generic gates) | Test on the gates | Result |
+|---|---|---|---|
+| Memory arbiter + broadcast (4 requesters, 2 channels, 16-entry list of reads in flight) | 23,458 | random stress test, memory delays 1, 6, 40, two seeds | bit exact; reads, shared reads and ticks identical to the written design |
+| Vector unit version 2, 4 lanes (memories kept as memory blocks) | 128,041 | 2^x and 1/x on 5,120 inputs incl. every exponent; softmax, RMSNorm, SiLU programs (both versions) | bit exact |
+| Whole tile version 4, 4x4 (memories kept as memory blocks) | 207,574 | three layers chained (SiLU -> INT8), every intermediate and final word | bit exact, 5,067 ticks as the written design |
+
+The tile was also run as gates in Verilator with every register starting
+at a random value (as on real silicon), three chains, two seeds each: all
+bit exact, about 2 seconds per run instead of about 25 minutes.
+
+**A real finding.** The first gate-level run of the tile never finished.
+The post-processing stage's write-out counter is set to 0 when that stage
+starts, but in the gates its lowest bit came out unknown: the gate logic
+for it mixes in the counter's previous value, which had never been set.
+The unknown then spread through every count. On real silicon a register
+always holds 0 or 1, so the chip would have worked (the random-start runs
+show this), but a control counter whose start-up value is undefined is
+exactly what reviewers flag. Fixed: the stage's counters are now reset.
+No earlier check could see it: the written design's simulator quietly
+treats an unknown as "false". This is what gate-level simulation is for.
+
+**Two practical notes.** (1) The arbiter as gates uses a 16-entry list of
+reads in flight instead of 256: Yosys ran out of memory on the full list
+(as gates, every look-up into it is a large selection circuit; a real chip
+would use a small dedicated memory). Same logic, fewer entries; with a
+40-tick memory it then pauses new reads sooner. (2) Yosys's optional
+memory-sharing optimisation was skipped for the arbiter and the tile: it
+ran out of memory on these designs, and it only optimises.
+
+**Vector unit size.** At 4 lanes, version 1 is 63,280 gates and version 2
+128,041: one-instruction 2^x and 1/x about **double** the vector unit
+(about 16,000 more gates per lane, mostly the wide multipliers of their
+correction steps). For comparison, the whole 4x4 engine with its
+controller is 89,325. The engine grows with N x N, the vector unit with N,
+so at 16 x 16 the vector unit would be roughly a third of the engine's
+gates. Next: narrower multipliers for the corrections, or one 2^x / 1/x
+unit shared by several lanes over a few ticks (as GPUs do); area on a real
+cell library still to be estimated (W2).

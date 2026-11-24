@@ -98,7 +98,11 @@ deliberately planted bugs, real model data.
       accidental latch and one silent-overflow risk found and fixed
 - [ ] One command that re-runs every test after every change
 - [x] Gate-level simulation: tests rerun on the gates Yosys builds
-      (`make gate`): converter and 4x4 engine + controller bit exact
+      (`make gate`; `FULL=1` adds arbiter, vector unit, whole tile): all bit
+      exact; found and fixed an unset counter in tile v4
+- [ ] Gate level at 8x8 and 16x16 (Verilator, fast)
+- [ ] Vector unit v2 size: narrower correction multipliers or a shared
+      2^x / 1/x unit (v2 is 2x the gates of v1)
 - [ ] Gate-level runs with wire delays, after a layout flow (W2)
 - [ ] FPGA prototype running real models at real speed. Moved earlier
       (community input, 2026-11-24): open projects run small accelerators on
