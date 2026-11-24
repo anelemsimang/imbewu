@@ -1104,3 +1104,67 @@ both test chains (`make mutants-tile-v4`).
 use it); rows up to 64 words; results go through main memory to the next
 layer (keeping them in the tile's own memory is a later saving). Rows of
 softmax and RMSNorm must fit in one command (the full width of the layer).
+
+## 2026-11-24 - Vector unit version 2: one-instruction 2^x and 1/x (D-024)
+
+**Why.** Tile version 4 showed the vector unit had become the slowest step
+(SiLU post-processing 4,258 ticks against 2,304 for the engine). A new
+tool, `tools/vu_budget.py`, compares the vector unit's ticks with the
+engine's for real model shapes: with version 1, for Qwen2.5-0.5B at 4k
+tokens of context it would need 1.9x the engine's time (16x16 engine), and
+for Llama-3-70B at 32k about the same as the engine.
+
+**What was built.** `rtl/vu_v2.v`: version 1 plus, in every lane,
+- **EX2** (2^x) and **RCP** (1/x) in one instruction each (a "special
+  function unit", as GPUs have). Each is defined exactly as a few integer
+  steps with a small table (64 entries for 2^x, 128 for 1/x) in
+  `tools/vu_asm.py`; the hardware's tables are generated from that
+  definition, so the two cannot drift apart;
+- instructions that take a constant directly (ADDC, SUBC, MULC, MAXC,
+  MINC), so programs stop spending a tick loading each constant.
+
+| Instructions per vector of N numbers | v1 | v2 |
+|---|---|---|
+| SiLU | 50 | 7 |
+| softmax | 41 | 11 |
+| RMSNorm (per vector) | 8 | 8 |
+
+Vector-unit time as a share of engine time (16x16 engine, per token per
+layer; 100% = as long as the engine):
+
+| Model, context | v1 | v2 |
+|---|---|---|
+| Qwen2.5-0.5B, 4k | 190% | 51% |
+| Qwen2.5-0.5B, 32k | 415% | 111% |
+| Llama-3-8B, 32k | 144% | 39% |
+| Llama-3-70B, 32k | 101% | 27% |
+
+So for the larger models the vector unit is now comfortably faster than
+the engine; for a small model at very long context it still is not.
+
+**Exactness and accuracy.**
+- Hardware = definition bit for bit on 12,288 inputs: every exponent,
+  zeros, infinities, tiny numbers, the clamp limits, random bit patterns.
+- Programs on the hardware = emulator bit for bit; version 1 programs
+  still give identical results on the version 2 hardware.
+- Largest relative error: 2^x below 2^-21, 1/x below 2^-22 (FP32 itself
+  is 2^-24). On test rows, SiLU and softmax come out slightly *more*
+  accurate than version 1's software sequences.
+- Tile version 4 now uses version 2: all 15 chained runs bit exact; the
+  SiLU chain's post-processing fell from 4,258 to 1,506 ticks, the whole
+  chain from 7,819 to 5,067.
+- Whole model (Qwen2.5-0.5B, Q x K^T with the 14-bit K split): FP8
+  weights **+6.88%** perplexity (version 1: +6.54%); FP4 weights +33.6%
+  (version 1: +32.8%). A small difference; the new functions are not less
+  accurate on their own, so this is most likely how rounding differences
+  add up in this model, but it was not investigated further.
+
+**Planted bugs.** Six bugs in the new hardware (2^x reading the wrong
+table entry, rounding negative inputs the wrong way, dropping its
+correction term; 1/x exponent off by one, correction with the wrong sign;
+constant-operand instructions using a register instead): see
+`tests/run_vu2_mutants.sh` (results below when run).
+
+**Limits.** Each new instruction is still one long tick; a real chip
+would spread 2^x and 1/x over a few ticks (pipelining). Size not yet
+estimated (each lane gains two small tables and a few multipliers).

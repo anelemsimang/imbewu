@@ -139,6 +139,17 @@ deliberately planted bugs, real model data.
 - [ ] Power model, so performance per watt (G5) can be estimated
 - [ ] Optionally cross-check with MIT's open Timeloop / Accelergy tools
 
+### W6 - From the community reading (docs/research/community_reading_2026-11-24.md)
+- [ ] Spare tiles and a "disable this tile" switch, so a chip with a
+      manufacturing defect can still be sold (yield)
+- [ ] Cost per good chip (with yield) in the cost model (G5)
+- [ ] Performance model: prefill and decode reported separately
+- [ ] Simulate a mixed cluster: one large grid for feed-forward layers,
+      smaller grids for attention
+- [ ] Power: engine hot spots and a fast power limiter
+- [ ] Write a "good enough" list beside G1-G5: what we deliberately keep
+      simple
+
 ### W5 - People, partners and gatekeepers (limitation 6; founder-led)
 - [ ] External technical review of the architecture before the pitch
       (university chip-design group or independent consultant)
@@ -206,5 +217,9 @@ answers can be run through SiLU, softmax or RMSNorm, rounded back into MX
 blocks in hardware and laid out for the next layer, so one tile runs a
 chain of layers with no software in between; bit exact.
 
-Next: make the vector unit faster (it is now the slowest step for SiLU),
-and keep chained results on chip instead of going through main memory.
+The vector unit is faster (version 2, D-024): 2^x and 1/x in one
+instruction each; SiLU 7x and softmax 3.7x fewer instructions; for 8B and
+70B models it now needs well under half the engine's time.
+
+Next: keep chained results on chip instead of going through main memory;
+then the items from the community reading (docs/research/).

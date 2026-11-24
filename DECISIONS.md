@@ -190,3 +190,14 @@ results pass through main memory, the simplest correct design; keeping
 them on chip is a later optimisation. Measured: bit exact on 18 chained
 runs; the vector unit becomes the slowest step for SiLU, so its speed is
 the next performance question.
+
+### D-024 - One-instruction 2^x and 1/x in the vector unit
+Measured (`tools/vu_budget.py`): with software exp and 1/x the vector unit
+would take longer than the engine for small models and long contexts.
+Version 2 adds 2^x and 1/x as single instructions (defined exactly in
+`tools/vu_asm.py`, tables generated from the definition) and constant
+operands. SiLU 50 -> 7 and softmax 41 -> 11 instructions per vector.
+Accuracy below 2^-21 relative; whole-model perplexity +6.88% vs +6.54%
+before (FP8 weights). Chosen over fused multiply-add alone (smaller gain)
+and over more lanes (more area, same instruction count). The same 1:N
+ratio of vector lanes to engine multiply-adds as TPUv2 at N = 16.
