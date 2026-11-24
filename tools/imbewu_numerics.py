@@ -57,7 +57,7 @@ def mx_split(x, fmt):
     bs = int(bsz) if bsz else BLOCK
     xb = x.double().reshape(*x.shape[:-1], -1, bs)
     amax = xb.abs().amax(-1)
-    e = torch.floor(torch.log2(amax.clamp(min=2.0 ** -127))) - (0 if name == "mxint16" else EMAX[name])
+    e = torch.floor(torch.log2(amax.clamp(min=2.0 ** -127))) - (0 if name in ("mxint16", "mxint14") else EMAX[name])
     e = e.clamp(-127, 127)
     y = xb / torch.exp2(e).unsqueeze(-1)
     if name == "mxfp8":
@@ -66,6 +66,8 @@ def mx_split(x, fmt):
         y = round_fp4(y.float()).double()
     elif name == "mxint16":
         y = torch.round(y * 16384).clamp(-32768, 32767) / 16384
+    elif name == "mxint14":                        # 14-bit whole numbers: what split16 carries exactly
+        y = torch.round(y * 4096).clamp(-8192, 8191) / 4096
     else:
         y = torch.round(y * 64).clamp(-128, 127) / 64
     return y, e
@@ -95,6 +97,32 @@ def imbewu_matmul(x, w, fa="mxfp8", fb="mxfp8", wsplit=None):
             acc = (acc.double() + blk[kb]).float()
         out[t0:t0 + step] = acc
     return out.reshape(*lead, w.shape[0])
+
+
+def split16(q, k):
+    """D-021 on today's engine: K in 14-bit MX whole numbers (MXINT14) becomes
+    two MXINT8 blocks per block - the high part (code c // 128, block scale
+    e + 7) and the low part (c mod 128, balanced to -64..63) - and Q's block
+    is repeated for both. q [B, T, K], k [B, N, K] -> q' [B, T, 2K], k' [B, N, 2K].
+    Run as an ordinary MXINT8 x MXINT8 multiply, the engine's exact block
+    sums give Q x K^T with K in 14 bits (two FP32 roundings per block
+    instead of one). Why 14 bits: an MXINT8 block holds whole numbers
+    -127..127 exactly only when none of them is -128, so each part must stay
+    within 7 bits plus sign; 14 bits is the most that splits exactly."""
+    pad = (-q.shape[-1]) % BLOCK
+    if pad:
+        q, k = F.pad(q, (0, pad)), F.pad(k, (0, pad))
+    uk, ek = mx_split(k, "mxint14")                   # values in [-2, 2), steps of 2^-12
+    c = torch.round(uk * 4096)                        # 14-bit codes, -8192..8191
+    hi = torch.round(c / 128)                         # balanced split: c = 128 hi + lo
+    lo = c - 128 * hi                                 # hi in -64..64, lo in -64..64: both INT8
+    sc = torch.exp2(ek).unsqueeze(-1)
+    k_hi = hi / 32 * sc                               # = 128 hi x 2^-12 x scale
+    k_lo = lo / 4096 * sc
+    kk = torch.stack([k_hi, k_lo], dim=-2).reshape(*k.shape[:-1], -1)
+    qb = q.reshape(*q.shape[:-1], -1, BLOCK)
+    qq = torch.stack([qb, qb], dim=-2).reshape(*q.shape[:-1], -1)
+    return qq.float(), kk.float()
 
 
 def imbewu_bmm(x, w, fa="mxfp8", fb="mxfp8"):
@@ -245,9 +273,13 @@ def make_attention(qk_fmt="mxfp8", pv_fmt="mxfp8"):
         elif qk_fmt == "bf16":                     # candidate: BF16 inputs, FP32 sums (approximate model)
             s = torch.matmul(query.bfloat16().float(), k.bfloat16().float().transpose(2, 3))
         else:                                      # Q x K^T on the engine
-            qa, qb = qk_fmt.split("/") if "/" in qk_fmt else (qk_fmt, qk_fmt)   # Q format / K format
-            s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
-                           qa, qb).reshape(B, H, T, -1)
+            if qk_fmt == "split16":                # K in 16 bits as two INT8 blocks (D-021)
+                q2, k2 = split16(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D))
+                s = imbewu_bmm(q2, k2, "mxint8", "mxint8").reshape(B, H, T, -1)
+            else:
+                qa, qb = qk_fmt.split("/") if "/" in qk_fmt else (qk_fmt, qk_fmt)   # Q format / K format
+                s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
+                               qa, qb).reshape(B, H, T, -1)
         s = s * f32(scaling)
         if attention_mask is not None:
             s = s + attention_mask.float()
