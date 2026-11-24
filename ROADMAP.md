@@ -96,14 +96,22 @@ deliberately planted bugs, real model data.
 - [ ] Assertions inside the designs, checked during every simulation
 - [ ] Lint checks (Verilator) on every design, run by `make test`
 - [ ] One command that re-runs every test after every change
-- [ ] Later, with funding: FPGA prototype running real models at real speed
+- [ ] Gate-level simulation: re-run the tests on the circuit after synthesis
+      (catches differences between the design and what the tools built)
+- [ ] FPGA prototype running real models at real speed. Moved earlier
+      (community input, 2026-11-24): open projects run small accelerators on
+      low-cost boards, so a 4x4 tile demo may be affordable before funding;
+      a board purchase is the founder's decision
 
 ### W2 - Real physical numbers (limitation 4: no secret factory rules)
 - [x] First step: engine mapped onto real cell libraries (SKY130, open 45 nm)
       with free tools: area and logic-only clock speed; slow paths found and
       fixed (`tools/w2_estimate.sh`, D-019)
 - [ ] Full layout flow (OpenLane / OpenROAD) on SKY130 or GF180: placement,
-      wiring, real clock speed and power
+      wiring, real clock speed and power. Watch for what hobby designs hit
+      here (community input, 2026-11-24): wiring congestion around wide
+      buses, clock skew across the grid, and power-supply droop when every
+      multiplier switches at once
 - [ ] Scale those numbers to modern processes using published industry data,
       clearly labelled as estimates
 - [ ] List of blocks that must be licensed (HBM interface, high-speed links,
