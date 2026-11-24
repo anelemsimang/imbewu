@@ -299,3 +299,13 @@ Simulating every gate of the chip for a whole model would take days, so we
 copy the chip's arithmetic exactly in fast software, after checking the
 copy against the hardware. That lets us run a real language model end to
 end "as the chip would" and see how good its answers still are.
+
+## Many tiles, one memory
+A chip has many tiles, but they all fetch numbers from the same main
+memory, which can only hand out so much per tick. An **arbiter** is the
+traffic officer at that door: each tick it lets a few tiles through, taking
+turns so nobody waits forever, and makes sure each answer goes back to the
+tile that asked. Our test showed the lesson plainly: four tiles behind one
+memory door are no faster than one; give each tile its own door and four
+tiles are 3.3 times faster. Extra compute is only worth paying for if the
+memory can feed it.

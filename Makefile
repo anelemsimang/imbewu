@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu formal mutants perf synth clean
+.PHONY: test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-cluster formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-cluster
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -133,6 +133,10 @@ test-fp32ops:
 
 test-vu:
 	python3 tests/run_vu_tests.py
+
+# Phase 3: several tiles sharing one main memory through an arbiter
+test-cluster:
+	tests/run_cluster_tests.sh
 
 # Formal proof of the engine's output rules (needs the Yices solver,
 # installed by: pip install -r tools/requirements.txt)

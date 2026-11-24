@@ -879,3 +879,55 @@ raw scores. Total change in the weights per token, against FP32 (0 = none,
 it is 2.0% for FP8 and 2.4% for the split, yet the split moves the weights
 less than half as much. It weighs big scores most, while softmax depends on
 the differences between scores.)
+
+## 2026-11-24 - Phase 3 begins: several tiles sharing one main memory (goals G2, G3)
+
+**What was built.** `rtl/cluster.v` holds T tiles (tile version 3, each
+with its own engine, SRAM and weight slots) and a **memory arbiter**: main
+memory accepts up to B requests per tick (B "channels"); every tick the
+arbiter lets up to B of the tiles that are asking go ahead, taking turns
+(round robin, so no tile can be starved), labels each request with the
+tile's number, and the answers come back to the tile that asked.
+
+**Test.** One model layer, FP8 x FP8: 8 tokens x 32 output channels,
+K = 256, on 4x4 engines. The 8 groups of output channels are shared out
+among the tiles (group g to tile g mod T); each tile fetches its weights
+once and reuses them for both batches of tokens. Main memory answers after
+40 ticks. Every answer word is checked bit for bit against the independent
+reference, and the test also checks every engine was fed exactly the
+right number of beats (`tests/run_cluster_tests.sh`, `make test-cluster`).
+
+| Tiles | Memory channels | Ticks for the layer | Speed-up | Engines busy |
+|---|---|---|---|---|
+| 1 | 1 | 7,214 | 1.0x | 56% |
+| 2 | 1 | 7,093 | 1.02x | 28% |
+| 4 | 1 | 7,009 | 1.03x | 14% |
+| 2 | 2 | 3,862 | 1.87x | 53% |
+| 4 | 4 | 2,186 | 3.30x | 46% |
+
+All answers bit exact in all five runs.
+
+**What it shows.**
+1. **More tiles do nothing if memory can't feed them.** With one shared
+   channel, four tiles are 3% faster than one: the layer is limited by
+   memory, so extra engines just wait. This is the G2/G3 link in one table:
+   chip-to-chip and tile-to-tile scaling only pays if memory bandwidth grows
+   with it.
+2. **With bandwidth to match, scaling is close to linear**: 1.87x on two
+   tiles, 3.3x on four. The gap from 4x is the start and end of the layer
+   (filling and draining the pipelines) and that this layer is small.
+3. **Activations are read many times.** Every run reads 6,336 words from
+   memory, of which 4,224 are the tokens (activations), fetched once per
+   group of output channels. When several tiles work on the same tokens at
+   the same time, one read could feed them all (a **broadcast**). For four
+   tiles that would cut this layer's memory reads by about half (6,336 to
+   about 3,170) and so speed up the memory-limited case by about 2x.
+
+**Planted bugs.** The arbiter was deliberately broken in two ways (answer
+sent to the wrong tile; one more grant per tick than memory has channels):
+see the result below.
+
+**Limits.** Memory here is an ideal delay with B independent channels; a
+real HBM model (banks, refresh, row hits and misses) comes later in
+Phase 3. Tiles do not yet talk to each other directly (no on-chip network),
+and tiles are given their work by the test, not by a scheduler.

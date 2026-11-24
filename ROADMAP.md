@@ -69,8 +69,11 @@ design effort (see DECISIONS.md, D-013).
 - [ ] Power gating: switch off idle parts of the tile
 
 ## Phase 3 - Scale-up  (G2, G3)
+- [x] 4-tile simulation: tiles sharing main memory through an arbiter;
+      scaling measured (docs/RESULTS.md, 2026-11-24)
+- [ ] Broadcast of shared activations to several tiles (cuts duplicate reads)
 - [ ] On-chip network connecting tiles
-- [ ] 4-tile, then 16-tile simulation
+- [ ] 16-tile simulation
 - [ ] HBM memory controller and bandwidth model
 - [ ] Chip-to-chip link design based on open standards (UALink / Ultra Ethernet)
 - [ ] Collective operations in hardware (the data exchanges chips do during
@@ -181,5 +184,9 @@ model data.
 
 The architecture document (pitch package part 1) is written.
 
-Next: the multi-tile simulation (Phase 3, goal G2): several tiles sharing
-main memory and working on one model layer. Then the vector unit in the tile.
+The multi-tile simulation runs (Phase 3): up to 4 tiles share main memory
+through an arbiter, bit exact. With one memory channel extra tiles give no
+speed-up; with a channel per tile, 4 tiles are 3.3x faster.
+
+Next: broadcast shared activations to several tiles (one read feeds all),
+then the vector unit in the tile.
