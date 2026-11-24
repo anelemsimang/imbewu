@@ -142,7 +142,9 @@ deliberately planted bugs, real model data.
 ### W6 - From the community reading (docs/research/community_reading_2026-11-24.md)
 - [x] Spare tiles and a "disable this tile" switch, so a chip with a
       manufacturing defect can still be sold (yield); tested in the cluster
-- [ ] Cost per good chip (with yield) in the cost model (G5)
+- [x] Cost per good chip (with yield): 2 spare tiles cut silicon cost per
+      working chip ~30% (600 mm^2); the shared part now limits yield
+- [ ] Protect the shared part of the chip (spare memory channel / link)
 - [x] Performance model: prefill and decode reported separately, with the
       vector unit's time (RESULTS 2026-11-24); decode is memory-bound
 - [ ] Simulate a mixed cluster: one large grid for feed-forward layers,

@@ -1238,3 +1238,38 @@ check: unequal turn-taking (answers stay right, only speed suffers).
 **Not yet done.** The real compiler (`tools/imbewu_compile.py`) does not
 yet read the tile-off list; a yield and cost-per-good-chip estimate (W6)
 is next.
+
+## 2026-11-24 - Cost per working chip, with spare tiles (W6, goal G5)
+
+`tools/yield_model.py`: random (Poisson) defects; the shared part of the
+chip (memory interfaces, links, control) must be defect free; the tile
+part works if at most S of its tiles are faulty (S spares). ASSUMPTIONS:
+0.001 defects per mm^2 (reported for TSMC 5 nm, Cerebras article) and
+twice that; wafer USD 17,000 (public estimate); R18 per USD; 60% of the
+chip in 256 tiles. Silicon only (no packaging, HBM or test).
+
+600 mm^2 chip, 0.001 defects per mm^2:
+
+| Spare tiles | Chip area | Working chips | Silicon cost per working chip |
+|---|---|---|---|
+| 0 | 600 mm^2 | 55% | USD 344 (R6,195) |
+| 2 | 603 mm^2 | 78% | USD 242 (R4,348), -30% |
+| 8 | 611 mm^2 | 79% | USD 246, -29% |
+
+With twice the defects: 30% -> 60% working, cost per working chip halves
+(USD 627 -> 317). For a 300 mm^2 chip: -16% (or -29% with twice the
+defects).
+
+**What it shows.**
+1. Two spare tiles (0.5% more area) give almost all the benefit; more
+   spares cost area and gain nothing.
+2. What then decides the yield is the shared 40% of the chip, which has no
+   spare: 79% at most here. So the next yield step is to protect that part
+   (e.g. a spare memory channel or link, as large chips do), and to keep it
+   small.
+3. The bigger and the more defect-prone the chip, the more this matters:
+   it is worth the most for a large first chip on a new process.
+
+**Limits.** Real defects cluster and some faults are not "a tile works or
+not" (timing, leakage); both lower yield further. The numbers are for
+choosing a design, not for pricing.
