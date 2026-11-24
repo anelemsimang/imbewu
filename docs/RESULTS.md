@@ -1008,3 +1008,41 @@ results reported then came from a separate, correct run.
 reorders; it would then also put answers back in order). The design
 assumes no tile reads an address another tile writes during the same
 layer, which holds because inputs and outputs are kept apart.
+
+## 2026-11-24 - Vector unit into the tile, step 1: FP32 back into MX blocks
+
+**Why.** The vector unit works in FP32 (softmax, RMSNorm, SiLU). The next
+matrix multiply needs its inputs as MX blocks: 8-bit (or 4-bit) numbers
+sharing one power-of-two scale per block of 32. So results must be rounded
+back into blocks, in hardware, exactly as the compiler and the numerics
+model do it (otherwise the whole-model accuracy results would not hold).
+
+**What was built.** `rtl/mx_quant.v` takes N FP32 numbers per tick. For
+each block of 32 it finds the largest, sets the block scale from it, and
+rounds every number into INT8, FP8 or FP4 (nearest value, ties to even,
+capped at the format's largest value). It collects the next block while
+sending out the current one, so it keeps up with one word per tick.
+
+**Test.** Compared code for code against the compiler's own rounding
+(which uses the independent ml_dtypes library): random numbers at every
+scale, exact ties, values at and just past each format's largest value,
+tiny (subnormal) inputs, zeros and minus zeros, blocks mixing huge and
+tiny numbers, and a different format on every block; 4, 8 and 16 lanes;
+blocks back to back and with random gaps. **108,000 blocks, all
+identical** (`make test-mxq`). Six planted bugs (ties rounded up, FP8 scale
+one step off, FP8 capped at 480 instead of 448, block scale not kept above
+-127, tiny inputs' exponent off by one, INT8 not reaching -128): **all
+caught** (`make mutants-mxq`).
+
+One bug found on the way: for numbers so small they round to zero, the
+rounding read a bit beyond the end of the number (unknown value in
+simulation). Fixed.
+
+**Size.** For 4 lanes: about 9,600 logic cells plus two 1,024-bit block
+buffers (Yosys, generic cells). For a 16x16 engine (16 lanes) that would be
+roughly 5% of the engine; worth trimming later (the general-purpose
+shifters can be made narrower).
+
+**Next.** Step 2: the transpose (the engine writes one token per word, but
+reads its next input as one position of K per word, across tokens) and
+the tile's path engine -> vector unit -> converter -> next command.
