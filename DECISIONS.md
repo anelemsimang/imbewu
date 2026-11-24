@@ -164,3 +164,16 @@ exact block sums do the rest. Whole model: +6.54% (FP8 weights). Cost:
 half speed for Q x K^T only (a few per cent of total time up to 4k tokens
 of context). Dedicated MXINT16 hardware is kept as an option for very long
 contexts.
+
+### D-022 - Tiles share activation reads (broadcast by joining reads in flight)
+The multi-tile simulation (docs/RESULTS.md, 2026-11-24) showed that when
+memory is the limit, extra tiles add nothing, and that two thirds of the
+reads were the same activations fetched by each tile. The cluster now
+merges identical reads: a tile asking for an address already being read
+(this tick or a few reads earlier, answer not yet returned) joins that
+read. Chosen over a separate broadcast bus driven by a scheduler because it
+needs no change to the tiles' programs and works even when tiles drift a
+few words apart. Commands get a weight-address field (w_at) so many
+commands can share one copy of their activations. Measured: 1.4x (2 tiles)
+and 1.8x (4 tiles) faster on one memory channel; memory reads halved in
+every multi-tile case.

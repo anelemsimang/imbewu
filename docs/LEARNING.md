@@ -309,3 +309,12 @@ tile that asked. Our test showed the lesson plainly: four tiles behind one
 memory door are no faster than one; give each tile its own door and four
 tiles are 3.3 times faster. Extra compute is only worth paying for if the
 memory can feed it.
+
+## Broadcast: one fetch, many readers
+When several tiles need the same numbers (the same tokens, multiplied by
+different weights), it is wasteful for each to fetch its own copy. The
+arbiter now notices when a tile asks for something that is already on its
+way from memory and simply adds that tile to the delivery list, like
+adding a name to a group order instead of placing a second order. With one
+memory channel, four tiles became 1.8 times faster; with more channels the
+speed was already fine, but memory traffic (and so energy) still halved.

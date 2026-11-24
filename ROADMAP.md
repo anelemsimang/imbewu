@@ -71,7 +71,8 @@ design effort (see DECISIONS.md, D-013).
 ## Phase 3 - Scale-up  (G2, G3)
 - [x] 4-tile simulation: tiles sharing main memory through an arbiter;
       scaling measured (docs/RESULTS.md, 2026-11-24)
-- [ ] Broadcast of shared activations to several tiles (cuts duplicate reads)
+- [x] Broadcast of shared activations to several tiles: tiles join reads
+      already in flight (D-022): 1.8x faster on one channel, reads halved
 - [ ] On-chip network connecting tiles
 - [ ] 16-tile simulation
 - [ ] HBM memory controller and bandwidth model
@@ -188,5 +189,8 @@ The multi-tile simulation runs (Phase 3): up to 4 tiles share main memory
 through an arbiter, bit exact. With one memory channel extra tiles give no
 speed-up; with a channel per tile, 4 tiles are 3.3x faster.
 
-Next: broadcast shared activations to several tiles (one read feeds all),
-then the vector unit in the tile.
+Broadcast works (D-022): tiles reading the same activations share one
+memory read. On one memory channel, 4 tiles are now 1.8x faster than
+without it, and memory reads halve in every multi-tile case.
+
+Next: the vector unit in the tile.

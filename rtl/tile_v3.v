@@ -19,6 +19,10 @@
 //
 // Command field added: b_slot = bit 19 (inside the 20 unused bits).
 // tile_v3 adds: pk = bit 18: the FP4 side is packed two per lane (D-020).
+// and w_at = bits 17:0: if not zero, the command's weights (B, then B
+// scales) are read from main-memory address 4 x w_at instead of straight
+// after A and its scales. So several commands, on one tile or several, can
+// share one copy of their activations (needed for broadcast, cluster.v).
 // ---------------------------------------------------------------------------
 // (Description of version 1 follows.)
 // tile_v1.v - the Imbewu tile, first version (Phase 2; goals G1, G3, G4)
@@ -132,6 +136,7 @@ module tile_v3 #(
     reg [4:0] lu [0:1];
     reg       lu_v [0:1];
     function f_slot; input [199:0] c; f_slot = c[19]; endfunction
+    function [17:0] f_wat; input [199:0] c; f_wat = c[17:0]; endfunction
 
     // ---- data mover ---------------------------------------------------------
     localparam D_IDLE = 0, D_LOAD = 1, D_ST_RD = 2, D_ST_WAIT = 3, D_ST_CAP = 4, D_ST_SEND = 5;
@@ -139,7 +144,7 @@ module tile_v3 #(
     reg [199:0]   dcmd;                      // command being moved
     reg           dhalf;
     reg [16:0]    iss, rcv, total;           // load: words requested / received / total
-    reg [16:0]    isb;                       // load: start offset in the command's area
+    reg [EAW-1:0] dbase;                     // load: main-memory address of the first word
     reg [15:0]    na, nab, nabs;             // load: region boundaries
     reg [15:0]    cw;                        // store: C word index
     reg [1:0]     part;
@@ -259,7 +264,7 @@ module tile_v3 #(
                     q_cmd[qw]  <= nli[3:0];
                     qw  <= qw + 1;
                     nli <= nli + 1;
-                    iss <= 0; isb <= 0;
+                    iss <= 0; dbase <= f_in(ncmd_ld);
                     dstate <= D_LOAD;
                 end else if (busy && w_go) begin       // weights, as early as the slot allows
                     dcmd  <= wcmd;
@@ -274,7 +279,8 @@ module tile_v3 #(
                     q_cmd[qw]  <= kw[3:0];
                     qw  <= qw + 1;
                     kw  <= kw + 1;
-                    iss <= 0; isb <= f_na(wcmd) + f_nsa(wcmd);   // weights follow A and its scales
+                    iss <= 0;                              // weights at w_at, else after A and its scales
+                    dbase <= (f_wat(wcmd) != 18'd0) ? {f_wat(wcmd), 2'b00} : f_in(wcmd) + f_na(wcmd) + f_nsa(wcmd);
                     dstate <= D_LOAD;
                 end else if (busy && can_store) begin
                     dcmd  <= cmds[nst[3:0]];
@@ -291,7 +297,7 @@ module tile_v3 #(
                 if (mem_req && mem_ready) iss <= iss + 1;
                 mem_req  <= (iss + (mem_req && mem_ready) < total);
                 mem_we   <= 1'b0;
-                mem_addr <= f_in(dcmd) + isb + iss + (mem_req && mem_ready);
+                mem_addr <= dbase + iss + (mem_req && mem_ready);
                 if (iss + (mem_req && mem_ready) == total) begin
                     mem_req <= 1'b0;
                     dstate  <= D_IDLE;

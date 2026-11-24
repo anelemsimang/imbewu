@@ -6,7 +6,10 @@ inputs, FP8 x FP8 (MX). The G weight groups are shared out among T tiles
 (group g goes to tile g mod T); each tile fetches each of its groups once
 and reuses it for every batch of tokens (tile_v3 weight slots). Expected
 answers come from the independent reference (exact block sums, one FP32
-rounding per block). Main-memory layout per command: layout v3.
+rounding per block). Main memory holds ONE copy of each batch of tokens
+(A, then its scales), shared by every command and tile that uses it, and
+one copy of each group's weights (B, then its scales) at its own address,
+which the command gives in its w_at field (tile_v3.v).
 
 Usage: python3 tools/gen_cluster_vectors.py N T G P KBLOCKS OUT_PREFIX [SEED]
 Writes OUT_PREFIX_mem.hex, _cmd<t>.hex (one per tile), _exp.hex, _meta.hex
@@ -65,17 +68,24 @@ def main():
             C[m][n] = acc
 
     mem, exp, cmds = [], [], [[] for _ in range(T)]
+    a_at, w_at = [], []
+    for p in range(P):                               # tokens: one shared copy per batch
+        a_at.append(len(mem))
+        mem.extend(a_words(p) + sa_words(p))
+    for g in range(G):                               # weights: one copy per group, at 4 x w_at
+        mem.extend([0] * (-len(mem) % 4))
+        w_at.append(len(mem) // 4)
+        mem.extend(b_words(g) + sb_words(g))
+    assert len(mem) < 1 << 18
     out_ptr = 1 << 18
     for t in range(T):
         for slot_i, g in enumerate(range(t, G, T)):
             for p in range(P):
                 load_b = p == 0
-                in_addr = len(mem)
-                mem.extend(a_words(p) + sa_words(p) + (b_words(g) + sb_words(g) if load_b else []))
-                cmds[t].append(pack([(in_addr, 20), (K, 16), (K if load_b else 0, 16), (KB, 12),
+                cmds[t].append(pack([(a_at[p], 20), (K, 16), (K if load_b else 0, 16), (KB, 12),
                                      (KB if load_b else 0, 12), (out_ptr, 20), (N, 16), (1, 8), (1, 8),
                                      (K, 16), (BLOCK, 16), (KB, 16), (FP8, 2), (FP8, 2),
-                                     (slot_i % 2, 1), (0, 1), (0, 18)]))
+                                     (slot_i % 2, 1), (0, 1), (w_at[g], 18)]))
                 for i in range(N):                     # C word i = row p*N+i, columns of group g
                     full = word([C[p * N + i][g * N + j] for j in range(N)], 32)
                     for q in range(4):

@@ -933,3 +933,78 @@ stuck.
 real HBM model (banks, refresh, row hits and misses) comes later in
 Phase 3. Tiles do not yet talk to each other directly (no on-chip network),
 and tiles are given their work by the test, not by a scheduler.
+
+## 2026-11-24 - Broadcast: one memory read feeds every tile that needs it (goals G2, G3, G5)
+
+**The problem.** In the multi-tile run above, every tile fetched its own
+copy of the same tokens (activations): two thirds of all memory reads were
+duplicates.
+
+**What was built.**
+- Main memory now holds **one copy** of each batch of tokens. Each command
+  says where its weights are (new 18-bit field `w_at`; zero keeps the old
+  layout, so all earlier tests are unchanged and still pass).
+- The cluster keeps a short **list of reads in flight** (the same idea as
+  the "miss registers" of a processor cache). When a tile asks for an
+  address that is already being read (in the same tick, or up to 8 reads
+  earlier, as long as the answer has not yet arrived), it **joins** that
+  read instead of using a memory channel; when the answer arrives it goes
+  to every tile on the read. A tile may only join a read issued after the
+  ones it is already waiting on, so its answers still arrive in order.
+- First version merged only same-tick requests. That worked for 4 tiles
+  but not for 2: the two tiles settled one word apart (one asking for word
+  i while the other asked for word i-1) and never matched. Joining reads in
+  flight fixed it.
+
+**Results** (same layer as above; every answer bit exact):
+
+| Tiles | Channels | Ticks, no broadcast | Ticks, broadcast | Speed-up | Memory reads |
+|---|---|---|---|---|---|
+| 2 | 1 | 7,093 | 4,997 | 1.42x | 6,336 to 4,224 |
+| 4 | 1 | 7,009 | 3,853 | 1.82x | 6,336 to 3,168 |
+| 2 | 2 | 3,862 | 3,862 | 1.0x | 6,336 to 4,224 |
+| 4 | 4 | 2,186 | 2,186 | 1.0x | 6,336 to 3,168 |
+
+**What it shows.**
+1. When memory is the limit (one channel), broadcast makes the layer
+   **1.4x faster on 2 tiles and 1.8x on 4**, close to the "about 2x"
+   estimated beforehand. The tokens are now read exactly once; what is left
+   is the weights (2,112 reads, each needed by one tile only) and the
+   answers.
+2. When memory is not the limit (a channel per tile), the time does not
+   change, but memory traffic still halves. Moving data to and from HBM
+   costs far more energy than computing on it, so this is a performance
+   per watt gain (G5) even where it is not a speed gain.
+3. Put differently: 4 tiles with broadcast on **one** channel (3,853
+   ticks) do as well as 2 tiles with **two** channels and no broadcast
+   (3,862). Broadcast buys the effect of extra memory bandwidth, which is
+   the most expensive part of an accelerator.
+
+**Cost.** The list holds 256 reads (enough for 40 ticks of memory delay on
+4 channels), each with its address, a time stamp and one bit per tile; a
+new request is compared against the last 8 addresses. Small next to a
+tile's SRAM; a size estimate comes with the next physical estimate.
+
+**Planted bugs, and a gap they found.** Five bugs were planted in the
+arbiter and broadcast (answers to the wrong tile; one grant too many per
+tick; joining a read older than one the tile is already waiting on;
+joining a read whose answer is arriving that very tick; comparing
+addresses without their lowest bit). The layer test caught only the first
+two: tiles read their tokens in a tidy sequence that never sets up the
+other cases. So the arbiter was split into its own module (`mem_share`)
+and given a **stress test** (`tests/tb_mem_share.v`): random requesters
+reading from a small shared set of addresses and from a moving window
+(like tiles a few words apart), with writes mixed in, on 2 to 8
+requesters, 1 to 8 channels and memory delays of 1 to 40 ticks; every
+answer is checked for the right requester, order and data. The real
+design passes all 48 runs (up to 29% of reads shared); **all five planted
+bugs are caught** (`make mutants-cluster`).
+
+Also found and fixed: the planted-bug script from the first multi-tile
+run passed its file paths wrongly, so it never tested anything; the
+results reported then came from a separate, correct run.
+
+**Limits.** Memory answers in the order asked (a real HBM controller
+reorders; it would then also put answers back in order). The design
+assumes no tile reads an address another tile writes during the same
+layer, which holds because inputs and outputs are kept apart.
