@@ -1202,3 +1202,39 @@ weights and activations, tokens per second for the whole system:
    a known limit; softmax's share grows with context length.
 
 Generated tables: `results/perf_model.md`. Roofline model: optimistic.
+
+## 2026-11-24 - Spare tiles: a chip with a faulty tile still works (yield; W6)
+
+**Why.** Chips come out of the factory with occasional defects. Large chips
+survive this by switching off the faulty units and selling the rest (e.g.
+Nvidia's H100 sells with 132 of its 144 compute units on). Imbewu is built
+from identical tiles, so it can do the same.
+
+**What was built.** The cluster has a `tile_off` input (on a real chip, set
+from the factory test, e.g. by fuses). A switched-off tile is held in
+reset: it never asks for memory, and the cluster does not wait for it. The
+test-data generator (standing in for the compiler) shares the work among
+the working tiles only.
+
+**Test.** 4 tiles with tile 2 off, and with tiles 0 and 3 off; one memory
+channel and four. Every answer bit exact. The test also hands each
+switched-off tile a real command list as bait and fails if it ever
+touches memory.
+
+**A bug found by measuring, not by the answer check.** With one tile off,
+all answers were right, but broadcast stopped sharing reads entirely
+(6,336 reads, the no-sharing figure). Cause: the turn-taking still gave
+the dead tile a turn, which passed to the next tile, so that tile got
+twice the share of memory, raced ahead, and the tiles drifted too far
+apart to share. Fixed: turns skip switched-off tiles. Now 4 tiles with one
+off behave exactly like a 3-tile cluster (5,013 ticks, 4,231 reads, same
+numbers). Lesson: broadcast depends on the tiles getting equal turns.
+
+**Planted bugs.** Added: the cluster waiting for switched-off tiles (never
+finishes), and a switched-off tile not held in reset (caught by the bait
+check: it tried to use memory 4,990 times). Not covered by a pass/fail
+check: unequal turn-taking (answers stay right, only speed suffers).
+
+**Not yet done.** The real compiler (`tools/imbewu_compile.py`) does not
+yet read the tile-off list; a yield and cost-per-good-chip estimate (W6)
+is next.

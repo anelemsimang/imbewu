@@ -7,6 +7,12 @@
 // forever), remembers which tiles each read is for, and sends each answer
 // back to them.
 //
+// Spare tiles: tile_off marks tiles that are switched off (e.g. found
+// faulty in the factory test, so the chip is sold with fewer working
+// tiles). A switched-off tile is held in reset: it never asks for memory,
+// and the cluster does not wait for it to finish. The compiler gives it no
+// work.
+//
 // Broadcast (BC = 1): when several tiles read the same address, memory
 // gets ONE read and its answer goes to all of them. A tile may join a read
 // issued in the same tick, or one issued a few ticks earlier whose answer
@@ -38,6 +44,7 @@ module cluster #(
     input  wire [200*T-1:0]   cmd_data,
     input  wire [5*T-1:0]     n_cmds,
     input  wire               start,
+    input  wire [T-1:0]       tile_off,      // 1 = tile switched off (spare / faulty)
     output wire               busy,
     output reg                done,
     // main memory: B request slots per tick
@@ -68,7 +75,7 @@ module cluster #(
     generate
         for (i = 0; i < T; i = i + 1) begin : tile
             tile_v3 #(.N(N), .EAW(EAW)) u (
-                .clk(clk), .rst(rst),
+                .clk(clk), .rst(rst | tile_off[i]),
                 .cmd_we(cmd_we[i]), .cmd_idx(cmd_idx[4*i +: 4]), .cmd_data(cmd_data[200*i +: 200]),
                 .n_cmds(n_cmds[5*i +: 5]), .start(start), .busy(t_busy[i]), .done(t_done[i]),
                 .mem_req(t_req[i]), .mem_we(t_we[i]), .mem_addr(t_addr[EAW*i +: EAW]),
@@ -87,6 +94,22 @@ module cluster #(
         .m_req(m_req), .m_we(m_we), .m_addr(m_addr), .m_wdata(m_wdata),
         .m_rvalid(m_rvalid), .m_rdata(m_rdata));
 
+    // next tile to get first choice: the next one that is switched on (so
+    // every working tile gets an equal share of turns; without this, the
+    // tile after a switched-off one gets two turns and races ahead)
+    reg [TW-1:0] rr_next;
+    reg          rr_found;
+    integer q;
+    reg [TW:0] qi;
+    always @(*) begin
+        rr_next = rr; rr_found = 1'b0;
+        for (q = 1; q <= T; q = q + 1) begin
+            qi = rr + q;
+            if (qi >= T) qi = qi - T;
+            if (!rr_found && !tile_off[qi]) begin rr_next = qi; rr_found = 1'b1; end
+        end
+    end
+
     // ---- whole-cluster status ----------------------------------------------------
     reg [T-1:0] finished;
     reg         running;
@@ -96,12 +119,12 @@ module cluster #(
         if (rst) begin
             rr <= 0; finished <= 0; running <= 1'b0; ticks <= 0;
         end else begin
-            rr <= (rr == T - 1) ? 0 : rr + 1'b1;
+            rr <= rr_next;
             if (start && !running) begin
                 running <= 1'b1; finished <= 0; ticks <= 0;
             end else if (running) begin
                 ticks <= ticks + 1;
-                if ((finished | t_done) == {T{1'b1}}) begin
+                if ((finished | t_done | tile_off) == {T{1'b1}}) begin
                     running <= 1'b0; done <= 1'b1;
                 end
                 finished <= finished | t_done;

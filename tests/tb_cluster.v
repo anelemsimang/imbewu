@@ -31,8 +31,9 @@ module tb_cluster;
     wire [32*T-1:0] ticks_engine;
     wire [31:0] ticks;
 
+    reg  [T-1:0] tile_off = 0;
     cluster #(.N(N), .T(T), .B(B), .EAW(EAW), .BC(`BCAST)) dut (.clk(clk), .rst(rst), .cmd_we(cmd_we),
-        .cmd_idx(cmd_idx), .cmd_data(cmd_data), .n_cmds(n_cmds), .start(start), .busy(busy),
+        .cmd_idx(cmd_idx), .cmd_data(cmd_data), .n_cmds(n_cmds), .start(start), .tile_off(tile_off), .busy(busy),
         .done(done), .m_req(m_req), .m_we(m_we), .m_addr(m_addr), .m_wdata(m_wdata),
         .m_rvalid(m_rvalid), .m_rdata(m_rdata), .ticks_engine(ticks_engine), .ticks(ticks));
     always #5 clk = ~clk;
@@ -68,25 +69,33 @@ module tb_cluster;
     initial for (k = 0; k < 41; k = k + 1) meta[k] = 0;
     reg [1023:0] pre;
     reg [8*8-1:0] num;
-    integer k, n, nexp, errors = 0, fed = 0, tt;   // tt: own loop counter (t belongs to the memory model)
+    integer k, n, nexp, errors = 0, fed = 0, tt, src, bait, off_req = 0;
+    always @(posedge clk) if (dut.t_req & tile_off) off_req = off_req + 1;   // must stay 0   // tt: own loop counter (t belongs to the memory model)
     initial begin
         if (!$value$plusargs("PRE=%s", pre)) begin $display("need +PRE="); $finish; end
         if (!$value$plusargs("LAT=%d", lat)) lat = 40;
+        if (!$value$plusargs("OFF=%d", k)) k = 0;      // tiles switched off (bit mask)
+        tile_off = k;
         $readmemh({pre, "_meta.hex"}, meta, 0, 3 + T);
         if (meta[0] != T) begin $display("vectors are for %0d tiles", meta[0]); $display("FAIL"); $finish; end
         nexp = meta[2];
         $readmemh({pre, "_mem.hex"}, mem, 0, meta[1] - 1);
         $readmemh({pre, "_exp.hex"}, expv, 0, nexp - 1);
         repeat (3) @(posedge clk); #1 rst = 0;
+        // a switched-off tile is given a real command list as bait (the first
+        // working tile's): it must still never touch memory
+        bait = 0;
+        while (bait < T && tile_off[bait]) bait = bait + 1;
         for (tt = 0; tt < T; tt = tt + 1) begin
-            num = "0" + tt;
-            $readmemh({pre, "_cmd", num[7:0], ".hex"}, cmds, 0, meta[4 + tt] - 1);
-            for (k = 0; k < meta[4 + tt]; k = k + 1) begin
+            src = tile_off[tt] ? bait : tt;
+            num = "0" + src;
+            if (meta[4 + src] > 0) $readmemh({pre, "_cmd", num[7:0], ".hex"}, cmds, 0, meta[4 + src] - 1);
+            for (k = 0; k < meta[4 + src]; k = k + 1) begin
                 cmd_we = 0; cmd_we[tt] = 1'b1;
                 cmd_idx[4*tt +: 4] = k; cmd_data[200*tt +: 200] = cmds[k];
                 @(posedge clk); #1;
             end
-            n_cmds[5*tt +: 5] = meta[4 + tt];
+            n_cmds[5*tt +: 5] = meta[4 + src];
         end
         cmd_we = 0;
         start = 1; @(posedge clk); #1 start = 0;
@@ -94,11 +103,12 @@ module tb_cluster;
         for (n = 0; n < nexp; n = n + 1)
             if (mem[expv[n][EAW+W8-1:W8]] !== expv[n][W8-1:0]) errors = errors + 1;
         for (tt = 0; tt < T; tt = tt + 1) fed = fed + ticks_engine[32*tt +: 32];
-        $display("CLUSTER %0d tiles of %0dx%0d, %0d memory channel(s): %0d answer words checked, %0d errors",
-                 T, N, N, B, nexp, errors);
+        $display("CLUSTER %0d tiles of %0dx%0d (switched off: %b), %0d memory channel(s): %0d answer words checked, %0d errors",
+                 T, N, N, tile_off, B, nexp, errors);
         $display("CLUSTER %0d tiles, %0d channel(s), broadcast %0d: %0d ticks; engines fed %0d of %0d tile-ticks (%0d%%); memory %0d reads, %0d writes",
                  T, B, `BCAST, ticks, fed, T * ticks, 100 * fed / (T * ticks), reads, writes);
-        if (errors == 0 && fed == meta[3]) $display("PASS"); else $display("FAIL");
+        if (off_req) $display("switched-off tile asked for memory %0d times", off_req);
+        if (errors == 0 && fed == meta[3] && off_req == 0) $display("PASS"); else $display("FAIL");
         $finish;
     end
     // time limit: +MAXT=<ticks> (default 2,000,000)

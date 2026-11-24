@@ -11,7 +11,9 @@ rounding per block). Main memory holds ONE copy of each batch of tokens
 one copy of each group's weights (B, then its scales) at its own address,
 which the command gives in its w_at field (tile_v3.v).
 
-Usage: python3 tools/gen_cluster_vectors.py N T G P KBLOCKS OUT_PREFIX [SEED]
+Usage: python3 tools/gen_cluster_vectors.py N T G P KBLOCKS OUT_PREFIX [SEED] [OFF]
+  OFF: bit mask of tiles switched off (spare / faulty); they get no work and
+  the groups are shared among the working tiles.
 Writes OUT_PREFIX_mem.hex, _cmd<t>.hex (one per tile), _exp.hex, _meta.hex
 (T, memory words, answer words, engine beats, then commands per tile).
 """
@@ -31,13 +33,16 @@ def main():
     N, T, G, P, KB = (int(v) for v in sys.argv[1:6])
     pre = sys.argv[6]
     random.seed(int(sys.argv[7]) if len(sys.argv) > 7 else 11)
+    off = int(sys.argv[8]) if len(sys.argv) > 8 else 0
+    live = [t for t in range(T) if not (off >> t) & 1]
+    assert live, "no working tile"
     K = BLOCK * KB
     M, NO = P * N, G * N
     A = [[rand_code(FP8, "rand") for _ in range(K)] for _ in range(M)]       # tokens x K
     W = [[rand_code(FP8, "rand") for _ in range(K)] for _ in range(NO)]      # outputs x K
     sa = [[random.randrange(112, 142) for _ in range(KB)] for _ in range(M)]
     sw = [[random.randrange(112, 142) for _ in range(KB)] for _ in range(NO)]
-    assert K <= HALF and G * P <= 16 * T
+    assert K <= HALF and G * P <= 16 * len(live)
 
     def word(lanes, width=8):
         out = 0
@@ -78,8 +83,8 @@ def main():
         mem.extend(b_words(g) + sb_words(g))
     assert len(mem) < 1 << 18
     out_ptr = 1 << 18
-    for t in range(T):
-        for slot_i, g in enumerate(range(t, G, T)):
+    for li, t in enumerate(live):                     # group g -> the (g mod live)th working tile
+        for slot_i, g in enumerate(range(li, G, len(live))):
             for p in range(P):
                 load_b = p == 0
                 cmds[t].append(pack([(a_at[p], 20), (K, 16), (K if load_b else 0, 16), (KB, 12),
