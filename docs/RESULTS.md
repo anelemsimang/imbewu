@@ -1162,8 +1162,9 @@ the engine; for a small model at very long context it still is not.
 **Planted bugs.** Six bugs in the new hardware (2^x reading the wrong
 table entry, rounding negative inputs the wrong way, dropping its
 correction term; 1/x exponent off by one, correction with the wrong sign;
-constant-operand instructions using a register instead): see
-`tests/run_vu2_mutants.sh` (results below when run).
+constant-operand instructions using a register instead): **all six
+caught**: the first five by the 2^x / 1/x test, the sixth by the program
+tests (`tests/run_vu2_mutants.sh`).
 
 **Limits.** Each new instruction is still one long tick; a real chip
 would spread 2^x and 1/x over a few ticks (pipelining). Size not yet
