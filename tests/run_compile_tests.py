@@ -9,7 +9,7 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
-from imbewu_compile import imbewu_linear   # noqa: E402
+from imbewu_compile import imbewu_attention_scores, imbewu_linear   # noqa: E402
 
 CASES = [  # tokens, inputs, outputs, activation format, weight format[, FP4 packed]
     (8, 64, 8, "mxfp8", "mxfp4"),
@@ -34,5 +34,14 @@ for case in CASES:
     print(f"{'PASS' if good else 'FAIL'}  {M}x{K} @ {K}x{O}, {a} x {w}{'' if pk else ' (unpacked)'}: {r['commands']} commands, "
           f"bit exact {r['bit_exact_vs_reference']}, error vs PyTorch FP32 "
           f"{r['relative_error_vs_pytorch_fp32_pct']}%")
+# attention scores with K split into two INT8 blocks (D-021)
+q = torch.randn(8, 64)
+k = torch.randn(12, 64)
+k[:, 5] *= 40                                   # one large channel, as in real models
+y, r = imbewu_attention_scores(q, k, N=4, work="build/compile/test_scores_split")
+good = r["bit_exact_vs_reference"] and r["bit_exact_vs_fast_model"] and r["tile_pass"]
+ok &= good
+print(f"{'PASS' if good else 'FAIL'}  attention scores 8x64 @ 64x12, K split into two INT8 blocks: "
+      f"bit exact vs reference {r['bit_exact_vs_reference']}, vs fast model {r['bit_exact_vs_fast_model']}")
 print("compiler: all PASS" if ok else "compiler: FAIL")
 sys.exit(0 if ok else 1)

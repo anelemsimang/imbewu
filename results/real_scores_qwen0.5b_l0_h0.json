@@ -1,0 +1,68 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "layer": 0,
+  "head": 0,
+  "tokens": 32,
+  "head_dim": 64,
+  "runs": [
+    {
+      "activations": "mxint8",
+      "weights": "mxint8",
+      "engine": "16x16",
+      "fp4_packed": false,
+      "commands": 1,
+      "tiles_per_command": "2x2",
+      "weight_groups": 1,
+      "token_batches": 1,
+      "bit_exact_vs_reference": true,
+      "tile_pass": true,
+      "relative_error_vs_pytorch_fp32_pct": 2.609,
+      "tile_timing": "868 ticks busy, engine fed on 256 (29%); memory: 264 reads, 256 writes",
+      "scores_as": "plain mxint8",
+      "attention_weights": {
+        "max_weight_change": 0.37968,
+        "mean_total_change_per_token": 0.75087
+      }
+    },
+    {
+      "activations": "mxfp8",
+      "weights": "mxfp8",
+      "engine": "16x16",
+      "fp4_packed": false,
+      "commands": 1,
+      "tiles_per_command": "2x2",
+      "weight_groups": 1,
+      "token_batches": 1,
+      "bit_exact_vs_reference": true,
+      "tile_pass": true,
+      "relative_error_vs_pytorch_fp32_pct": 1.992,
+      "tile_timing": "868 ticks busy, engine fed on 256 (29%); memory: 264 reads, 256 writes",
+      "scores_as": "plain mxfp8",
+      "attention_weights": {
+        "max_weight_change": 0.29355,
+        "mean_total_change_per_token": 0.35788
+      }
+    },
+    {
+      "activations": "mxint8",
+      "weights": "mxint8",
+      "engine": "16x16",
+      "fp4_packed": false,
+      "commands": 1,
+      "tiles_per_command": "2x2",
+      "weight_groups": 1,
+      "token_batches": 1,
+      "bit_exact_vs_reference": true,
+      "tile_pass": true,
+      "relative_error_vs_pytorch_fp32_pct": 2.3718,
+      "tile_timing": "1388 ticks busy, engine fed on 512 (36%); memory: 528 reads, 256 writes",
+      "bit_exact_vs_fast_model": true,
+      "k_split": "14-bit K as two MXINT8 blocks (D-021)",
+      "scores_as": "K split into two INT8 blocks (14-bit K)",
+      "attention_weights": {
+        "max_weight_change": 0.08614,
+        "mean_total_change_per_token": 0.1461
+      }
+    }
+  ]
+}

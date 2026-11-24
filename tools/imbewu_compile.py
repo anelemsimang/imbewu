@@ -237,6 +237,26 @@ def imbewu_linear(layer, x, a_fmt="mxfp8", w_fmt="mxfp4", N=16, work=None, packe
     return torch.tensor(y), report
 
 
+def imbewu_attention_scores(q, k, N=16, work=None):
+    """Attention scores S = Q x K^T on the simulated tile, with K carried in
+    14 bits by splitting each block into two MXINT8 blocks (decision D-021;
+    see split16 in tools/imbewu_numerics.py). q [T, D], k [S, D]."""
+    from imbewu_numerics import imbewu_bmm, split16
+    q2, k2 = split16(q.float().unsqueeze(0), k.float().unsqueeze(0))
+    q2, k2 = q2[0], k2[0]
+    lin = torch.nn.Linear(k2.shape[1], k2.shape[0], bias=False)
+    lin.weight.data = k2
+    y, report = imbewu_linear(lin, q2, "mxint8", "mxint8", N=N, packed=False,
+                              work=work or os.path.join(ROOT, "build", "compile", "scores"))
+    fast = imbewu_bmm(q2.unsqueeze(0), k2.unsqueeze(0), "mxint8", "mxint8")[0].double()
+    report["bit_exact_vs_fast_model"] = bool(torch.equal(y.float().view(torch.int32),
+                                                         fast.float().view(torch.int32)))
+    ref = q.double() @ k.double().t()
+    report["relative_error_vs_pytorch_fp32_pct"] = round(100 * float((y - ref).norm() / ref.norm()), 4)
+    report["k_split"] = "14-bit K as two MXINT8 blocks (D-021)"
+    return y, report
+
+
 def main():
     model_id = sys.argv[1] if len(sys.argv) > 1 else "Qwen/Qwen2.5-0.5B"
     layer_i = int(sys.argv[2]) if len(sys.argv) > 2 else 0

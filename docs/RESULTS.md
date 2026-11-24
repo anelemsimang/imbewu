@@ -857,3 +857,25 @@ shapes: Q x K^T is 0.2-1% of the multiplies at 512 tokens of context,
 12-29% to the total time respectively, against 1.4-1.9x at 32k for the
 quarter-speed MXINT16 design. Dedicated 16-bit hardware stays an option if
 very long contexts become the main use.
+
+**Update: the K split runs on the simulated tile.** The compiler now has
+`imbewu_attention_scores(q, k)` (in `tools/imbewu_compile.py`), which turns
+the split into one ordinary tile job. Checks: a random test with one large
+channel (`make test-compile`) and real Q and K captured inside Qwen2.5-0.5B's
+attention (`tools/real_scores_on_tile.py`; 32 tokens, head 0, layers 0 and
+12, 16x16 engine): bit exact against the compiler's reference and against
+the fast numerics model in every case.
+
+What matters to the model is the attention weights after softmax, not the
+raw scores. Total change in the weights per token, against FP32 (0 = none,
+2 = completely different):
+
+| Layer | Plain INT8 scores | Plain FP8 scores | K split (14-bit K) |
+|---|---|---|---|
+| 0 | 0.751 | 0.358 | **0.146** |
+| 12 | 0.022 | 0.121 | **0.021** |
+
+(The plain relative error of the score matrix can mislead here: in layer 0
+it is 2.0% for FP8 and 2.4% for the split, yet the split moves the weights
+less than half as much. It weighs big scores most, while softmax depends on
+the differences between scores.)

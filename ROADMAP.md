@@ -35,8 +35,8 @@ design effort (see DECISIONS.md, D-013).
 - [ ] Precision v2 rest: 4x FP4 packing, FP8 E5M2, NaN handling
 - [x] Attention scores with 14-bit K on today's engine: K split into two
       INT8 blocks by the compiler (D-021), whole model +6.5%
-- [ ] The K split in the compiler (`imbewu_compile.py`), checked bit exact on
-      the simulated tile
+- [x] The K split in the compiler (`imbewu_attention_scores`), bit exact on
+      the simulated tile with real Qwen Q and K
 - [ ] Dedicated MXINT16 hardware if very long contexts need full speed; BF16
       later, for training
 - [x] Real model numbers on the chip: Qwen2.5-0.5B activations and weights run
@@ -174,5 +174,8 @@ scores need more than 8 bits for K; the compiler can provide 14 bits on
 today's engine by splitting K into two INT8 blocks (D-021): +6.5% for the
 whole model with FP8 weights.
 
-Next: put the K split into the compiler and check it on the simulated tile,
-then connect the vector unit to the tile.
+The split is in the compiler and bit exact on the simulated tile with real
+model data.
+
+Next: connect the vector unit to the tile, so a whole attention block
+(scores, softmax, weighted sum) runs on the simulated hardware.
