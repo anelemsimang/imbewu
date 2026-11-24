@@ -20,7 +20,12 @@ module tb_tile_v4;
     reg [9:0] vi_a = 0; reg [5:0] vc_a = 0; reg [7:0] vv_a = 0;
     reg [31:0] vi_d = 0, vc_d = 0; reg [N*32-1:0] vv_d = 0;
 
+`ifdef GATE
+    tile_v4 dut (                     // gate-level netlist: settings fixed at synthesis
+`else
     tile_v4 #(.N(N)) dut (
+`endif
+       
        .clk(clk), .rst(rst), .cmd_we(cmd_we), .cmd_idx(cmd_idx),
         .cmd_data(cmd_data), .n_cmds(n_cmds), .start(start), .busy(busy), .done(done),
         .mem_req(mem_req), .mem_we(mem_we), .mem_addr(mem_addr), .mem_wdata(mem_wdata),
