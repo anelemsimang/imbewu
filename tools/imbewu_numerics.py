@@ -245,8 +245,9 @@ def make_attention(qk_fmt="mxfp8", pv_fmt="mxfp8"):
         elif qk_fmt == "bf16":                     # candidate: BF16 inputs, FP32 sums (approximate model)
             s = torch.matmul(query.bfloat16().float(), k.bfloat16().float().transpose(2, 3))
         else:                                      # Q x K^T on the engine
+            qa, qb = qk_fmt.split("/") if "/" in qk_fmt else (qk_fmt, qk_fmt)   # Q format / K format
             s = imbewu_bmm(query.float().reshape(B * H, T, D), k.float().reshape(B * H, -1, D),
-                           qk_fmt, qk_fmt).reshape(B, H, T, -1)
+                           qa, qb).reshape(B, H, T, -1)
         s = s * f32(scaling)
         if attention_mask is not None:
             s = s + attention_mask.float()
@@ -350,7 +351,7 @@ def main():
     ap.add_argument("--configs", default="ref,fp8,fp4")
     ap.add_argument("--attn", default="mxfp8",
                     help="attention products: mxfp8, mxint8, fp32, qk-fp32, pv-fp32, qk-bf16, "
-                         "qk-mxint16, qk-mxfp8@8 ...")
+                         "qk-mxint16, qk-mxfp8@8, qk-mxint16/mxint8 (Q / K formats) ...")
     ap.add_argument("--head", default="mxfp8", help="mxfp8 or none (output layer)")
     args = ap.parse_args()
     torch.set_num_threads(max(1, os.cpu_count() or 1))
@@ -388,7 +389,7 @@ def main():
         del model
     out = dict(model=args.model, dataset="wikitext-2-raw-v1 test", seq=args.seq, windows=args.windows,
                self_check=chk, results=results)
-    tag = "" if (args.attn, args.head) == ("mxfp8", "mxfp8") else f"_attn-{args.attn}_head-{args.head}"
+    tag = "" if (args.attn, args.head) == ("mxfp8", "mxfp8") else f"_attn-{args.attn}_head-{args.head}".replace("/", "x")
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results",
                            f"imbewu_numerics_qwen0.5b{tag}.json"), "w") as fh:
         json.dump(out, fh, indent=2)
