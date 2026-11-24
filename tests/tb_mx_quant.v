@@ -14,7 +14,12 @@ module tb_mx_quant;
     wire           out_valid, out_last;
     wire [N*8-1:0] out_codes;
     wire [7:0]     out_scale;
-    mx_quant #(.N(N)) dut (.clk(clk), .rst(rst), .fmt(fmt), .in_valid(in_valid), .in_data(in_data),
+`ifdef GATE
+    mx_quant dut (                    // gate-level netlist: settings fixed at synthesis
+`else
+    mx_quant #(.N(N)) dut (
+`endif
+        .clk(clk), .rst(rst), .fmt(fmt), .in_valid(in_valid), .in_data(in_data),
         .out_valid(out_valid), .out_codes(out_codes), .out_last(out_last), .out_scale(out_scale));
 
     reg [N*32-1:0] din  [0:65535];

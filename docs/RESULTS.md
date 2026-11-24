@@ -1311,3 +1311,27 @@ on the vector unit's lane-sum tree, which are a known Verilator false
 alarm for a tree stored as one array.
 
 After the fixes: all cluster and tile version 4 tests pass again (below).
+
+## 2026-11-24 - Gate-level simulation: the tests rerun on the built gates (W1)
+
+**What was done.** Yosys turned two designs into logic gates, as a chip
+flow does, and the same tests were run on those gates (using Yosys's gate
+models) instead of on the code we wrote. This catches differences between
+what we meant and what the tools built (code that simulates one way and
+synthesises another). `make gate` (`tests/run_gate_tests.sh`).
+
+| Design (as gates) | Size | Test on the gates | Result |
+|---|---|---|---|
+| FP32 -> MX converter, 4 lanes | about 9,600 logic cells + buffers | 36,000 blocks, every format, back to back and with gaps | bit exact |
+| Engine (4x4) + tiling controller | 89,325 cells | 5 whole matrix multiplies, all format pairs (FP8, INT8, FP4, mixed) | bit exact, and tick for tick the same timing as the written design |
+
+**What it shows.** No difference between the written design and the gates
+the tools built, for the engine and the converter. The test benches can
+now run on gates with one switch (`-DGATE`), so the same check can be
+repeated on the netlist a full layout flow produces later.
+
+**Limits.** Gates without wire delays (logic only): a timing-accurate run
+needs the delays from layout (W2). Only the 4x4 engine (larger sizes take
+long to simulate as gates); the tile, cluster and vector unit not yet (the
+tile is mostly memory, which a real chip builds from the foundry's memory
+blocks).

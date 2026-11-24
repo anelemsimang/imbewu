@@ -97,8 +97,9 @@ deliberately planted bugs, real model data.
 - [x] Lint checks (Verilator) on every current design (`make lint`): one
       accidental latch and one silent-overflow risk found and fixed
 - [ ] One command that re-runs every test after every change
-- [ ] Gate-level simulation: re-run the tests on the circuit after synthesis
-      (catches differences between the design and what the tools built)
+- [x] Gate-level simulation: tests rerun on the gates Yosys builds
+      (`make gate`): converter and 4x4 engine + controller bit exact
+- [ ] Gate-level runs with wire delays, after a layout flow (W2)
 - [ ] FPGA prototype running real models at real speed. Moved earlier
       (community input, 2026-11-24): open projects run small accelerators on
       low-cost boards, so a 4x4 tile demo may be affordable before funding;

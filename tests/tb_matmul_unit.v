@@ -19,7 +19,12 @@ module tb_matmul_unit;
     wire [AW-1:0] c_addr;
     wire [N*32-1:0] c_data;
 
-    matmul_unit #(.N(N), .AW(AW)) dut (.clk(clk), .rst(rst), .start(start),
+`ifdef GATE
+    matmul_unit dut (                 // gate-level netlist: settings fixed at synthesis
+`else
+    matmul_unit #(.N(N), .AW(AW)) dut (
+`endif
+       .clk(clk), .rst(rst), .start(start),
         .cfg_mt(cfg_mt), .cfg_nt(cfg_nt), .cfg_beats(cfg_beats), .cfg_bb(cfg_bb),
         .cfg_nb(cfg_nb), .cfg_fa(cfg_fa), .cfg_fb(cfg_fb), .cfg_pk(1'b0), .busy(busy), .done(done),
         .a_addr(a_addr), .a_data(a_data), .b_addr(b_addr), .b_data(b_data),
