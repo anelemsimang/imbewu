@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Vector-unit tests: softmax, RMSNorm and SiLU programs run on the
-simulated vector unit (rtl/vu_v1.v). Each result must equal the exact
+simulated vector unit: version 1 (rtl/vu_v1.v) with its programs, and
+version 2 (rtl/vu_v2.v) with both the old and the new programs. Each result must equal the exact
 emulator (tools/vu_asm.py) bit for bit; accuracy against PyTorch (float64)
 is reported."""
 import os
@@ -16,9 +17,10 @@ from vu_asm import bits, emulate, from_bits, rmsnorm, silu, softmax   # noqa: E4
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 OUT = os.path.join(ROOT, "build", "vu")
 VU_RTL = os.environ.get("IMBEWU_VU", "rtl/vu_v1.v")
+VU2_RTL = os.environ.get("IMBEWU_VU2", "rtl/vu_v2.v")
 
 
-def run(L, W, name, trials, rng, sim):
+def run(L, W, name, trials, rng, sim, ver=1, tag="v1"):
     ok, worst = True, 0.0
     for t in range(trials):
         x = (rng.standard_normal(W * L) * 3).astype(np.float32)
@@ -27,15 +29,15 @@ def run(L, W, name, trials, rng, sim):
             vm[a] = [bits(v) for v in x[a * L:(a + 1) * L]]
         xd = x.astype(np.float64)
         if name == "softmax":
-            p, ref = softmax(W), torch.softmax(torch.tensor(xd), 0).numpy()
+            p, ref = softmax(W, ver=ver), torch.softmax(torch.tensor(xd), 0).numpy()
         elif name == "rmsnorm":
             g = rng.standard_normal(W * L).astype(np.float32)
             for a in range(W):
                 vm[32 + a] = [bits(v) for v in g[a * L:(a + 1) * L]]
-            p, ref = rmsnorm(W, W * L), xd / np.sqrt((xd ** 2).mean() + 1e-6) * g
+            p, ref = rmsnorm(W, W * L, ver=ver), xd / np.sqrt((xd ** 2).mean() + 1e-6) * g
         else:
-            p, ref = silu(W), xd / (1 + np.exp(-xd))
-        pre = os.path.join(OUT, f"{name}_{L}_{W}_{t}")
+            p, ref = silu(W, ver=ver), xd / (1 + np.exp(-xd))
+        pre = os.path.join(OUT, f"{tag}_{name}_{L}_{W}_{t}")
         hw = lambda w: f"{w:0{8 * L}x}"
         with open(pre + "_imem.hex", "w") as fh:
             fh.writelines(f"{w:08x}\n" for w in p.words())
@@ -56,7 +58,7 @@ def run(L, W, name, trials, rng, sim):
         worst = max(worst, float(np.max(np.abs(y - ref) / np.maximum(np.abs(ref), 1e-30))))
         ok &= same
     ticks = log.strip().split("in ")[-1] if "finished" in log else "?"
-    print(f"{'PASS' if ok else 'FAIL'}  {name:8s} {L} lanes x {W} vectors, {trials} rows: "
+    print(f"{'PASS' if ok else 'FAIL'}  [{tag}] {name:8s} {L} lanes x {W} vectors, {trials} rows: "
           f"hardware = emulator bit for bit: {ok}; worst error vs PyTorch {worst:.2e}; {ticks}")
     return ok
 
@@ -72,6 +74,14 @@ def main():
                        check=True)
         for name in ("softmax", "rmsnorm", "silu"):
             ok &= run(L, W, name, 4, rng, sim)
+        # version 2: old programs (must behave exactly as before) and new ones
+        sim2 = os.path.join(OUT, f"tb_vu2_{L}")
+        subprocess.run(["iverilog", "-g2012", f"-DLANES={L}", "-DVU_V2", "-I", os.path.join(ROOT, "rtl"), "-o", sim2] +
+                       [os.path.join(ROOT, f) for f in ("rtl/fp32_add_fx.v", "rtl/fp32_ops.v", VU2_RTL, "tests/tb_vu.v")],
+                       check=True)
+        for name in ("softmax", "rmsnorm", "silu"):
+            ok &= run(L, W, name, 2, rng, sim2, 1, "v2 hw, v1 prog")
+            ok &= run(L, W, name, 4, rng, sim2, 2, "v2")
     print("vector unit: all PASS" if ok else "vector unit: FAIL")
     sys.exit(0 if ok else 1)
 

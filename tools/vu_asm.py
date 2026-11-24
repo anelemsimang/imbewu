@@ -16,7 +16,69 @@ Programs (all on rows of W vectors of L lanes, i.e. rows of W*L numbers):
 import numpy as np
 
 OPS = dict(HALT=0, LD=1, ST=2, ADD=3, SUB=4, MUL=5, MAX=6, MIN=7, RSUM=8, RMAX=9,
-           CONST=10, FLOOR=11, POW2I=12, RCPS=13, RSQS=14)
+           CONST=10, FLOOR=11, POW2I=12, RCPS=13, RSQS=14,
+           # version 2 (rtl/vu_v2.v): special functions and constant operands
+           EX2=15, RCP=16, ADDC=17, SUBC=18, MULC=19, MAXC=20, MINC=21)
+
+
+# ---- version 2 special functions, defined exactly (integer steps) -------------
+# The hardware (rtl/vu_v2.v) does exactly these steps, so results match bit
+# for bit. Accuracy against exact maths is measured by tests/run_vu_tests.py.
+EX2_T = [round(2.0 ** (i / 64) * 2 ** 23) for i in range(64)]       # 2^(i/64), 1.23 fixed
+EX2_L1 = round(0.6931471805599453 * 2 ** 32)                       # ln 2
+EX2_L2 = round(0.6931471805599453 ** 2 / 2 * 2 ** 32)              # (ln 2)^2 / 2
+RCP_C = [(round(2 ** 31 / a), round(2 ** 31 / a ** 2), round(2 ** 31 / a ** 3))
+         for a in ((2 ** 23 + (i << 16) + (1 << 15)) / 2 ** 23 for i in range(128))]
+
+
+def ex2_bits(a):
+    """2^x for an FP32 bit pattern; x is clamped to -126..127 (so the result
+    is always a normal number). 64-entry table of 2^(i/64), then a
+    second-order correction for the remaining fraction (< 1/64)."""
+    s, E, F = a >> 31, (a >> 23) & 255, a & 0x7FFFFF
+    if E >= 134:                                     # |x| >= 128 (or inf / NaN)
+        X = (-126 << 24) if s else (127 << 24)
+    else:
+        M = (F | (1 << 23)) if E else F
+        sh = E - 126 if E else -125                  # value * 2^24 = M * 2^(E - 126)
+        if sh >= 0:
+            mag, lost = M << sh, False
+        else:
+            mag, lost = M >> -sh, (M & ((1 << -sh) - 1)) != 0
+        X = -mag - (1 if lost else 0) if s else mag  # floor(x * 2^24)
+        X = max(-126 << 24, min(127 << 24, X))
+    n, fr = X >> 24, X & 0xFFFFFF
+    i, d = fr >> 18, fr & 0x3FFFF
+    e2 = (1 << 30) + ((d * EX2_L1) >> 26) + ((((d * d) >> 18) * EX2_L2) >> 32)
+    m = (EX2_T[i] * e2) >> 30
+    if m >= 1 << 24:
+        m >>= 1
+        n += 1
+    return ((n + 127) << 23) | (m & 0x7FFFFF)
+
+
+def rcp_bits(a):
+    """1/x for an FP32 bit pattern. Zero and tiny (subnormal) inputs give
+    infinity; results below the normal range become zero. 128-entry table
+    of 1/a, 1/a^2, 1/a^3 at the middle of each step, then a second-order
+    correction."""
+    s, E, F = a >> 31, (a >> 23) & 255, a & 0x7FFFFF
+    if E == 0:
+        return (s << 31) | 0x7F800000
+    if E == 255:
+        return s << 31
+    M = F | (1 << 23)
+    i = (M >> 16) & 127
+    dl = M - ((1 << 23) + (i << 16) + (1 << 15))     # -2^15 .. 2^15 - 1
+    c0, c1, c2 = RCP_C[i]
+    R = c0 - ((c1 * dl) >> 23) + ((c2 * ((dl * dl) >> 23)) >> 23)
+    if R >= 1 << 31:
+        field, m = 254 - E, R >> 8
+    else:
+        field, m = 253 - E, R >> 7
+    if field <= 0:
+        return s << 31
+    return (s << 31) | (field << 23) | (m & 0x7FFFFF)
 
 
 def f32(x):
@@ -45,6 +107,13 @@ class Program:
         if b not in self.consts:
             self.consts.append(b)
         self.ins("CONST", vd, imm=self.consts.index(b))
+
+    def cidx(self, value):
+        """Index of a constant in the table (added if new)."""
+        b = bits(value)
+        if b not in self.consts:
+            self.consts.append(b)
+        return self.consts.index(b)
 
     def words(self):
         return self.code + [0]                 # HALT at the end
@@ -97,7 +166,9 @@ def emit_rsqrt(p, a, out, t1, t2, iters=3):
 
 
 # ---- programs ----------------------------------------------------------------
-def softmax(W, src=0, dst=64, tmp=128):
+def softmax(W, src=0, dst=64, tmp=128, ver=1):
+    if ver == 2:
+        return softmax_v2(W, src, dst, tmp)
     p = Program()
     p.ins("LD", 0, imm=src)                    # v0 = running max
     for i in range(1, W):
@@ -119,7 +190,9 @@ def softmax(W, src=0, dst=64, tmp=128):
     return p
 
 
-def rmsnorm(W, n, eps=1e-6, src=0, gamma=32, dst=64):
+def rmsnorm(W, n, eps=1e-6, src=0, gamma=32, dst=64, ver=1):
+    if ver == 2:
+        return rmsnorm_v2(W, n, eps, src, gamma, dst)
     p = Program()
     p.const(7, 0.0)
     for i in range(W):
@@ -139,7 +212,9 @@ def rmsnorm(W, n, eps=1e-6, src=0, gamma=32, dst=64):
     return p
 
 
-def silu(W, src=0, dst=64):
+def silu(W, src=0, dst=64, ver=1):
+    if ver == 2:
+        return silu_v2(W, src, dst)
     p = Program()
     for i in range(W):
         p.ins("LD", 0, imm=src + i)
@@ -147,6 +222,65 @@ def silu(W, src=0, dst=64):
         emit_exp(p, 1, 2, 3, 4, 5)                   # exp(-x)
         p.const(3, 1.0); p.ins("ADD", 2, 2, 3)       # 1 + exp(-x)
         emit_recip(p, 2, 6, 3, 4)                    # 1 / (1 + exp(-x))
+        p.ins("MUL", 0, 0, 6)
+        p.ins("ST", va=0, imm=dst + i)
+    return p
+
+
+# ---- version 2 programs (special functions, constant operands) ----------------
+def softmax_v2(W, src=0, dst=64, tmp=128):
+    p = Program()
+    p.ins("LD", 0, imm=src)                    # v0 = running max
+    for i in range(1, W):
+        p.ins("LD", 1, imm=src + i); p.ins("MAX", 0, 0, 1)
+    p.ins("RMAX", 0, 0)
+    l2e = p.cidx(LOG2E)
+    p.const(7, 0.0)                            # v7 = running sum
+    for i in range(W):
+        p.ins("LD", 1, imm=src + i)
+        p.ins("SUB", 1, 1, 0)                  # x - max
+        p.ins("MULC", 1, 1, imm=l2e)           # times log2(e)
+        p.ins("EX2", 2, 1)                     # exp(x - max)
+        p.ins("ST", va=2, imm=tmp + i)
+        p.ins("ADD", 7, 7, 2)
+    p.ins("RSUM", 7, 7)
+    p.ins("RCP", 6, 7)                         # 1 / total
+    for i in range(W):
+        p.ins("LD", 1, imm=tmp + i)
+        p.ins("MUL", 1, 1, 6)
+        p.ins("ST", va=1, imm=dst + i)
+    return p
+
+
+def rmsnorm_v2(W, n, eps=1e-6, src=0, gamma=32, dst=64):
+    p = Program()
+    p.const(7, 0.0)
+    for i in range(W):
+        p.ins("LD", 1, imm=src + i)
+        p.ins("MUL", 1, 1, 1)
+        p.ins("ADD", 7, 7, 1)
+    p.ins("RSUM", 7, 7)
+    p.ins("MULC", 7, 7, imm=p.cidx(1.0 / n))   # mean
+    p.ins("ADDC", 7, 7, imm=p.cidx(eps))       # + eps
+    emit_rsqrt(p, 7, 6, 3, 4)                  # once per row: kept in software
+    for i in range(W):
+        p.ins("LD", 1, imm=src + i)
+        p.ins("MUL", 1, 1, 6)
+        p.ins("LD", 2, imm=gamma + i)
+        p.ins("MUL", 1, 1, 2)
+        p.ins("ST", va=1, imm=dst + i)
+    return p
+
+
+def silu_v2(W, src=0, dst=64):
+    p = Program()
+    nl2e, one = p.cidx(-LOG2E), p.cidx(1.0)
+    for i in range(W):
+        p.ins("LD", 0, imm=src + i)
+        p.ins("MULC", 1, 0, imm=nl2e)          # -x log2(e)
+        p.ins("EX2", 2, 1)                     # exp(-x)
+        p.ins("ADDC", 2, 2, imm=one)           # 1 + exp(-x)
+        p.ins("RCP", 6, 2)                     # 1 / (1 + exp(-x))
         p.ins("MUL", 0, 0, 6)
         p.ins("ST", va=0, imm=dst + i)
     return p
@@ -225,4 +359,11 @@ def emulate(prog, vmem, L):
             elif op == 12: vr[vd] = [_pow2i(a) for a in A]
             elif op == 13: vr[vd] = [(0x7EF311C3 - (a & 0x7FFFFFFF)) & 0xFFFFFFFF for a in A]
             elif op == 14: vr[vd] = [(0x5F3759DF - ((a & 0x7FFFFFFF) >> 1)) & 0xFFFFFFFF for a in A]
+            elif op == 15: vr[vd] = [ex2_bits(a) for a in A]
+            elif op == 16: vr[vd] = [rcp_bits(a) for a in A]
+            elif op in (17, 18, 19, 20, 21):
+                c = consts[imm & 63]
+                f = {17: lambda a: add(a, c), 18: lambda a: sub(a, c), 19: lambda a: mul(a, c),
+                     20: lambda a: c if _lt(a, c) else a, 21: lambda a: a if _lt(a, c) else c}[op]
+                vr[vd] = [f(a) for a in A]
     return vmem, ticks

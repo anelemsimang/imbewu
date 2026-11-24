@@ -14,8 +14,9 @@ bit-exact emulator (vu_asm.emulate), and the compiler's MX rounding
 (real_model_on_chip.block_codes). Every word of R1, R2 and the final
 answers is checked.
 
-Usage: python3 tools/gen_tile_v4_vectors.py N PROGRAM OUT1 OUT_PREFIX [SEED]
+Usage: python3 tools/gen_tile_v4_vectors.py N PROGRAM OUT1 OUT_PREFIX [SEED] [VU_VERSION]
   PROGRAM: silu | softmax | rmsnorm      OUT1: mxint8 | mxfp8 | mxfp4
+  VU_VERSION: 1 or 2 (default 2): which version of the programs to run
 """
 import os
 import random
@@ -64,6 +65,7 @@ def main():
     N, prog_name, out1 = int(sys.argv[1]), sys.argv[2], sys.argv[3]
     pre = sys.argv[4]
     random.seed(int(sys.argv[5]) if len(sys.argv) > 5 else 3)
+    ver = int(sys.argv[6]) if len(sys.argv) > 6 else 2
     MT = 2                                    # token tiles: M = 2N tokens
     M = MT * N
     K0 = 64
@@ -72,9 +74,9 @@ def main():
     NT2 = 2
     K1, K2 = NT0 * N, NT1 * N
     W_ = NT0                                  # vector-unit row length (words); one program for the run
-    prog = {"silu": lambda: vu_asm.silu(W_),
-            "softmax": lambda: vu_asm.softmax(W_),
-            "rmsnorm": lambda: vu_asm.rmsnorm(W_, W_ * N)}[prog_name]()
+    prog = {"silu": lambda: vu_asm.silu(W_, ver=ver),
+            "softmax": lambda: vu_asm.softmax(W_, ver=ver),
+            "rmsnorm": lambda: vu_asm.rmsnorm(W_, W_ * N, ver=ver)}[prog_name]()
     gamma = [vu_asm.bits(np.float32(random.uniform(0.5, 1.5))) for _ in range(W_ * N)]
     vpre = {32 + w: gamma[w * N:(w + 1) * N] for w in range(W_)} if prog_name == "rmsnorm" else {}
 
@@ -177,7 +179,7 @@ def main():
     with open(pre + "_meta.hex", "w") as fh:
         fh.write("".join(f"{v:x}\n" for v in (len(cmds), len(mem), len(exp), beats, len(prog.words()),
                                                max(1, len(prog.consts)), len(vpre))))
-    print(f"tile_v4 vectors: {M} tokens; layers {K0}->{K1}->{K2}->{NT2 * N}; program {prog_name} "
+    print(f"tile_v4 vectors: {M} tokens; layers {K0}->{K1}->{K2}->{NT2 * N}; program {prog_name} v{ver} "
           f"({len(prog.words())} instructions), middle output {out1}; {len(exp)} words checked")
 
 

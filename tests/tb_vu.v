@@ -1,4 +1,4 @@
-// tb_vu.v - runs one vector-unit program (rtl/vu_v1.v) and dumps memory.
+// tb_vu.v - runs one vector-unit program (rtl/vu_v1.v, or vu_v2.v with -DVU_V2) and dumps memory.
 // Settings: -DLANES=4   plusargs: +PRE=<prefix>  (reads _imem.hex, _cmem.hex,
 // _vmem.hex; writes _out.hex with all 256 vectors after the program)
 `timescale 1ns/1ps
@@ -13,7 +13,11 @@ module tb_vu;
     reg [31:0] imem_data = 0, cmem_data = 0; reg [L*32-1:0] vmem_wdata = 0;
     wire [L*32-1:0] vmem_rdata;
     wire busy; wire [15:0] ticks;
-    vu_v1 #(.L(L)) dut (.clk(clk), .rst(rst), .imem_we(imem_we), .imem_addr(imem_addr),
+`ifdef VU_V2
+    vu_v2 #(.L(L)) dut (
+`else
+    vu_v1 #(.L(L)) dut (
+`endif.clk(clk), .rst(rst), .imem_we(imem_we), .imem_addr(imem_addr),
         .imem_data(imem_data), .cmem_we(cmem_we), .cmem_addr(cmem_addr), .cmem_data(cmem_data),
         .vmem_we(vmem_we), .vmem_addr(vmem_addr), .vmem_wdata(vmem_wdata), .vmem_rdata(vmem_rdata),
         .start(start), .busy(busy), .ticks(ticks));

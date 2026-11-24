@@ -21,7 +21,8 @@
 //   [223:222] pmode, [221:220] pfmt (0 INT8, 1 FP8, 2 FP4), [219] dep.
 // In pmodes 1 and 2 the output (at out_addr) is mt x (nt*N + nt*N/32)
 // words: nt*N must be a multiple of 32, and nt at most 64.
-// The vector unit's program, constants and fixed data (e.g. RMSNorm's
+// The vector unit is version 2 (vu_v2.v: one-instruction 2^x and 1/x;
+// version 1 programs also run unchanged). Its program, constants and fixed data (e.g. RMSNorm's
 // gamma at vector address 32) are loaded through the vu_* ports before
 // start; one program serves every command of the run.
 // ---------------------------------------------------------------------------
@@ -242,7 +243,7 @@ module tile_v4 #(
     reg  [7:0]   p_vaddr;
     reg  [W32-1:0] p_vwdata;
     wire [W32-1:0] vu_rdata;
-    vu_v1 #(.L(N)) u_vu (
+    vu_v2 #(.L(N)) u_vu (
         .clk(clk), .rst(rst),
         .imem_we(vu_imem_we), .imem_addr(vu_imem_addr), .imem_data(vu_imem_data),
         .cmem_we(vu_cmem_we), .cmem_addr(vu_cmem_addr), .cmem_data(vu_cmem_data),

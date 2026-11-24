@@ -213,6 +213,57 @@ def vu_rsqrt(a):
     return out
 
 
+# ---- vector unit version 2 (D-024): one-instruction 2^x and 1/x --------------------
+VU_VER = 1                                        # set by --vu; 1 keeps earlier results reproducible
+
+
+def _to_f32(v):
+    """int64 holding FP32 bit patterns (0 .. 2^32-1) -> float32 tensor."""
+    return (((v + (1 << 31)) % (1 << 32)) - (1 << 31)).to(torch.int32).view(torch.float32)
+
+
+def vu_ex2(x):
+    """Exactly ex2_bits (tools/vu_asm.py), for a whole tensor."""
+    from vu_asm import EX2_L1, EX2_L2, EX2_T
+    a = x.contiguous().view(torch.int32).to(torch.int64) & 0xFFFFFFFF
+    s, E, Fm = a >> 31, (a >> 23) & 255, a & 0x7FFFFF
+    M = torch.where(E > 0, Fm | (1 << 23), Fm)
+    sh = torch.where(E > 0, E - 126, torch.full_like(E, -125))
+    k = (-sh).clamp(0, 40)
+    mag = torch.where(sh >= 0, M << sh.clamp(min=0), M >> k)
+    lost = (sh < 0) & ((M & ((1 << k) - 1)) != 0)
+    X = torch.where(s == 1, -mag - lost.to(torch.int64), mag)
+    X = torch.where(E >= 134, torch.where(s == 1, torch.full_like(X, -126 << 24), torch.full_like(X, 127 << 24)), X)
+    X = X.clamp(-126 << 24, 127 << 24)
+    n, fr = X >> 24, X & 0xFFFFFF
+    d = fr & 0x3FFFF
+    e2 = (1 << 30) + ((d * EX2_L1) >> 26) + ((((d * d) >> 18) * EX2_L2) >> 32)
+    m = (torch.tensor(EX2_T, dtype=torch.int64)[fr >> 18] * e2) >> 30
+    over = m >= (1 << 24)
+    m = torch.where(over, m >> 1, m)
+    n = n + over.to(torch.int64)
+    return _to_f32(((n + 127) << 23) | (m & 0x7FFFFF))
+
+
+def vu_rcp(x):
+    """Exactly rcp_bits (tools/vu_asm.py), for a whole tensor."""
+    from vu_asm import RCP_C
+    a = x.contiguous().view(torch.int32).to(torch.int64) & 0xFFFFFFFF
+    s, E, Fm = a >> 31, (a >> 23) & 255, a & 0x7FFFFF
+    M = Fm | (1 << 23)
+    i = (M >> 16) & 127
+    dl = M - ((1 << 23) + (i << 16) + (1 << 15))
+    c = torch.tensor(RCP_C, dtype=torch.int64)[i]
+    R = c[..., 0] - ((c[..., 1] * dl) >> 23) + ((c[..., 2] * ((dl * dl) >> 23)) >> 23)
+    hi = R >= (1 << 31)
+    field = torch.where(hi, 254 - E, 253 - E)
+    m = torch.where(hi, R >> 8, R >> 7)
+    res = torch.where(field <= 0, s << 31, (s << 31) | (field.clamp(min=0) << 23) | (m & 0x7FFFFF))
+    res = torch.where(E == 0, (s << 31) | 0x7F800000, res)
+    res = torch.where(E == 255, s << 31, res)
+    return _to_f32(res)
+
+
 def vu_softmax(x):
     """Softmax over the last dimension (padded to whole vectors)."""
     n = x.shape[-1]
@@ -224,8 +275,12 @@ def vu_softmax(x):
         m = _vmax(m, xw[..., i, :])
     while m.shape[-1] > 1:
         m = _vmax(m[..., 0::2], m[..., 1::2])
-    e = vu_exp(xp - m)
-    r = vu_recip(_row_sum(e)).unsqueeze(-1)
+    if VU_VER == 2:                                # SUB, MULC log2(e), EX2; RCP of the total
+        e = vu_ex2((xp - m) * f32(LOG2E))
+        r = vu_rcp(_row_sum(e)).unsqueeze(-1)
+    else:
+        e = vu_exp(xp - m)
+        r = vu_recip(_row_sum(e)).unsqueeze(-1)
     return (e * r)[..., :n]
 
 
@@ -238,6 +293,10 @@ def vu_rmsnorm(x, g, eps, n):
 
 
 def vu_silu(x):
+    if VU_VER == 2:                                # MULC -log2(e), EX2, ADDC 1, RCP, MUL
+        e = vu_ex2(x * f32(-LOG2E))
+        e = e + f32(1.0)
+        return x * vu_rcp(e)
     e = vu_exp(x * f32(-1.0))
     e = e + f32(1.0)
     return x * vu_recip(e)
@@ -338,7 +397,8 @@ def self_check():
             for a in range(W):
                 vm[a] = [bits(v) for v in x[a * LANES:(a + 1) * LANES]]
                 vm[32 + a] = [bits(v) for v in g[a * LANES:(a + 1) * LANES]]
-            prog = {"softmax": softmax(W), "rmsnorm": rmsnorm(W, W * LANES), "silu": silu(W)}[name]
+            prog = {"softmax": softmax(W, ver=VU_VER), "rmsnorm": rmsnorm(W, W * LANES, ver=VU_VER),
+                    "silu": silu(W, ver=VU_VER)}[name]
             emu, _ = emulate(prog, vm, LANES)
             ref = np.array([b for a in range(W) for b in emu[64 + a]], dtype=np.uint32)
             xt = torch.tensor(x)
@@ -385,7 +445,10 @@ def main():
                     help="attention products: mxfp8, mxint8, fp32, qk-fp32, pv-fp32, qk-bf16, "
                          "qk-mxint16, qk-mxfp8@8, qk-mxint16/mxint8 (Q / K formats) ...")
     ap.add_argument("--head", default="mxfp8", help="mxfp8 or none (output layer)")
+    ap.add_argument("--vu", type=int, default=1, help="vector unit version: 1, or 2 (one-instruction 2^x, 1/x)")
     args = ap.parse_args()
+    global VU_VER
+    VU_VER = args.vu
     torch.set_num_threads(max(1, os.cpu_count() or 1))
     chk = self_check()
     print("self-check:", json.dumps(chk), flush=True)
@@ -408,7 +471,7 @@ def main():
         if wf:
             to_imbewu(model, w_fmt=wf, attn=args.attn, head_fmt=None if args.head == "none" else args.head)
         ppl, ntok = perplexity(model, ids, args.seq, args.windows)
-        r = dict(config=label, attention=args.attn, output_layer=args.head,
+        r = dict(config=label, attention=args.attn, output_layer=args.head, vector_unit=f"v{VU_VER}",
                  perplexity=round(ppl, 3), tokens=ntok, seconds=round(time.time() - t0))
         if results:
             r["change_pct"] = round(100 * (ppl / results[0]["perplexity"] - 1), 2)
@@ -422,6 +485,7 @@ def main():
     out = dict(model=args.model, dataset="wikitext-2-raw-v1 test", seq=args.seq, windows=args.windows,
                self_check=chk, results=results)
     tag = "" if (args.attn, args.head) == ("mxfp8", "mxfp8") else f"_attn-{args.attn}_head-{args.head}".replace("/", "x")
+    tag += "_vu2" if VU_VER == 2 else ""
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results",
                            f"imbewu_numerics_qwen0.5b{tag}.json"), "w") as fh:
         json.dump(out, fh, indent=2)
