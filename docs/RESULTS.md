@@ -1092,7 +1092,13 @@ already runs while this one is post-processed. Still, making the vector
 unit faster (more lanes, or doing exp and 1/x in one step) is now on the
 list (W4 performance model to size it).
 
-**Planted bugs.** See below.
+**Planted bugs.** Six bugs planted in the new stage (tokens put in the
+wrong lanes by the transpose; the "wait" flag ignored, so a layer reads
+before its input is written; the converter fed the input row instead of
+the program's results; block scales written for the wrong group of
+tokens; the transpose written out before the converter finished; the
+converter fed before the vector unit finished): **all six caught**, in
+both test chains (`make mutants-tile-v4`).
 
 **Limits.** One vector-unit program per run (all post-processed commands
 use it); rows up to 64 words; results go through main memory to the next
