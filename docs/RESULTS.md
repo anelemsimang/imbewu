@@ -1235,6 +1235,8 @@ numbers). Lesson: broadcast depends on the tiles getting equal turns.
 finishes), and a switched-off tile not held in reset (caught by the bait
 check: it tried to use memory 4,990 times). Not covered by a pass/fail
 check: unequal turn-taking (answers stay right, only speed suffers).
+Full run of the cluster's planted bugs: **7 of 7 caught**
+(`make mutants-cluster`).
 
 **Not yet done.** The real compiler (`tools/imbewu_compile.py`) does not
 yet read the tile-off list; a yield and cost-per-good-chip estimate (W6)
