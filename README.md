@@ -1,6 +1,6 @@
 # Imbewu
 
-*Imbewu* means "seed" in isiZulu. This repository is the engineering workshop
+*Imbewu* means "seed" in isiXhosa. This repository is the engineering workshop
 for an African AI-chip venture. The long-term goal is an AI accelerator for
 African data centres, so that African AI models can be trained and run on
 hardware designed in Africa.
