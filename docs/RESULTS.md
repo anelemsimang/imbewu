@@ -825,3 +825,35 @@ working: one shared power-of-two scale per block of 32 and exact whole-
 number sums inside the block. BF16, where every number has its own
 exponent, would need much wider exact adders. Decision D-021 is updated
 accordingly.
+
+**Update: attention scores without new hardware.** Which side of
+Q x K^T needs the precision? Q in 16 bits x K in 8 bits: +12.3% (no help);
+Q in 8 bits x K in 16 bits: **+6.28%** (as good as 16 bits on both sides).
+So only K needs more than 8 bits, and the compiler can give it that on
+today's engine: each block of K, in 14-bit MX whole numbers (MXINT14), is
+split into a high and a low MXINT8 block (split at 2^7, the low block's
+scale 2^7 smaller), and Q's block is repeated for both. The engine's exact
+block sums then give Q x K^T with 14-bit K, at half speed for this one step.
+
+- Exactness (`split16()` in `tools/imbewu_numerics.py`): high + low equal
+  the MXINT14 values exactly in 50 of 50 trials; final FP32 results equal a
+  direct MXINT8 x MXINT14 product in 9,899 of 9,900 cases (the other one
+  differs because two FP32 roundings per block replace one).
+- 16- and 15-bit splits were tried first and are **not** exact: an MXINT8
+  block cannot hold -128 next to odd numbers without losing a bit, so each
+  part must stay within 7 bits plus sign. 14 bits is the most that splits
+  exactly (still 6 bits more than BF16's precision).
+
+| Q x K^T done as | FP8 weights | FP4 weights |
+|---|---|---|
+| MX FP8 (8-bit) | +13.1% | +46.0% |
+| BF16 (approximate model) | +6.4% | +33.7% |
+| MXINT16 (would need new hardware) | +6.25% | - |
+| **K split into two INT8 blocks (today's engine)** | **+6.54%** | **+32.8%** |
+
+**Cost: half speed for Q x K^T only.** From the performance model's model
+shapes: Q x K^T is 0.2-1% of the multiplies at 512 tokens of context,
+2-8% at 4k, 12-29% at 32k. At half speed that adds about 0-1%, 2-8% and
+12-29% to the total time respectively, against 1.4-1.9x at 32k for the
+quarter-speed MXINT16 design. Dedicated 16-bit hardware stays an option if
+very long contexts become the main use.

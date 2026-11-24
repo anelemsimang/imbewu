@@ -153,6 +153,14 @@ scale). With Q x K^T in BF16 the loss returns to +6.4%; with MXINT16
 +6.25%, the same as FP32; smaller 8-bit blocks do not help (+10% to +15%).
 MXINT16 is chosen over BF16: same accuracy, and it keeps the engine's exact
 block sums (BF16 gives every number its own exponent, needing much wider
-adders). Next on the hardware list, ahead of other precision extras. Pitch
-material quotes the MXINT16-attention configuration and states this
+adders). Pitch material quotes this configuration and states the
 requirement.
+
+Update (same day): only K needs the extra precision (Q 8-bit x K 16-bit:
++6.28%). So the requirement is met on today's engine, with no new
+hardware: the compiler splits each block of K (14-bit MX whole numbers)
+into a high and a low MXINT8 block and repeats Q's block; the engine's
+exact block sums do the rest. Whole model: +6.54% (FP8 weights). Cost:
+half speed for Q x K^T only (a few per cent of total time up to 4k tokens
+of context). Dedicated MXINT16 hardware is kept as an option for very long
+contexts.

@@ -33,7 +33,12 @@ design effort (see DECISIONS.md, D-013).
       same answers as version 4, 4x4 grid 54% smaller, proven never to
       double-book an adder (D-018)
 - [ ] Precision v2 rest: 4x FP4 packing, FP8 E5M2, NaN handling
-- [ ] MXINT16 mode for attention scores Q x K^T (D-021); BF16 later, for training
+- [x] Attention scores with 14-bit K on today's engine: K split into two
+      INT8 blocks by the compiler (D-021), whole model +6.5%
+- [ ] The K split in the compiler (`imbewu_compile.py`), checked bit exact on
+      the simulated tile
+- [ ] Dedicated MXINT16 hardware if very long contexts need full speed; BF16
+      later, for training
 - [x] Real model numbers on the chip: Qwen2.5-0.5B activations and weights run
       through the 16x16 engine in simulation; output matches software exactly
       (`tools/real_model_on_chip.py`, `results/`)
@@ -164,8 +169,10 @@ FP4 weights are now packed two per byte (D-020): half the memory reads and
 
 The vector unit (version 1) runs softmax, RMSNorm and SiLU.
 
-A whole language model has run on Imbewu's exact arithmetic; it showed
-attention scores need 16-bit numbers: MXINT16 (D-021).
+A whole language model has run on Imbewu's exact arithmetic. Attention
+scores need more than 8 bits for K; the compiler can provide 14 bits on
+today's engine by splitting K into two INT8 blocks (D-021): +6.5% for the
+whole model with FP8 weights.
 
-Next: the MXINT16 mode for attention scores, then connect the vector unit
-to the tile.
+Next: put the K split into the compiler and check it on the simulated tile,
+then connect the vector unit to the tile.
