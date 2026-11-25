@@ -1487,6 +1487,7 @@ paths are not yet measured behind it.
   space in the crowded spots clears them.
 - The wire measurement (OpenRCX) stops on a wire touching another pin. 9
   connections were set aside and timed as if their wire were perfect
-  (`extract_skipped_nets.txt`); none is on the slowest internal path.
+  (`extract_skipped_nets.txt`); none is on the slowest internal path at
+  the typical or slow corner (one is on it at the fast corner).
 - Detailed wiring takes 2 h 45 min on 4 cores, more than one background job
   may run here, so it was run detached.
