@@ -1379,3 +1379,23 @@ so at 16 x 16 the vector unit would be roughly a third of the engine's
 gates. Next: narrower multipliers for the corrections, or one 2^x / 1/x
 unit shared by several lanes over a few ticks (as GPUs do); area on a real
 cell library still to be estimated (W2).
+
+## 2026-11-25 - Gate level, larger engines (8x8; 16x16 below), with random start values
+
+**What was done.** The engine with its tiling controller turned into gates
+at 8x8 (275,606 gates; 4x4 was 89,325) and run in Verilator, which is fast
+enough for gates this size and starts every register at a random value, as
+real silicon does. Each test ran with several different random starts.
+
+| Engine | Tests (format pairs) | Random starts each | Result | Ticks vs written design |
+|---|---|---|---|---|
+| 4x4 | 5 (FP8, INT8, FP4, two mixed) | 5 | all 25 bit exact, written design too | identical |
+| 8x8 | 3 (FP8, FP4, FP8 x FP4) | 3 | all 9 bit exact | identical (792, 216, 408) |
+
+**Found on the way, in the test bench.** With random start values some
+runs reported one error although every answer word was right: the test
+bench counted the engine's answer writes on every tick, including the tick
+before reset took effect, when the write signal can start at 1. The test
+bench now counts writes only after reset. The design itself was fine (an
+answer write during reset lands in memory that is written again before it
+is read).
