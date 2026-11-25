@@ -1,6 +1,6 @@
 # Finish stage 2 from its saved routed layout (final.odb) without routing again:
 # extraction, then the final reports. Used when tools/w2_route.tcl stopped after
-# writing final.odb. Run: PLATFORM=.. OUT=.. PERIOD=.. openroad -exit tools/w2_finish.tcl
+# writing final.odb. Run by tools/w2_finish.sh.
 set P      $::env(PLATFORM)
 set OUT    $::env(OUT)
 set PERIOD $::env(PERIOD)
