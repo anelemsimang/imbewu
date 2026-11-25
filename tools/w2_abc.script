@@ -3,7 +3,6 @@ strash
 &fraig -x
 &put
 scorr
-dc2
 dretime
 strash
 &get -n

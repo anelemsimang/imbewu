@@ -8,8 +8,8 @@ proc w2_reports {OUT TAG PERIOD} {
   report_clock_skew -digits 3 > $OUT/${TAG}_skew.rpt
   report_tns > $OUT/${TAG}_tns.rpt
 
-  set wns  [sta::worst_slack_cmd max]
-  set hold [sta::worst_slack_cmd min]
+  set wns  [expr {[sta::worst_slack_cmd max] * 1e9}]   ;# returned in seconds
+  set hold [expr {[sta::worst_slack_cmd min] * 1e9}]
   set crit [expr $PERIOD - $wns]
 
   # Cell area by kind (logic, clock tree, tap/filler), and the die size
