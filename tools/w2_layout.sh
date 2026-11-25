@@ -2,11 +2,15 @@
 # Layout flow (W2 step 3): matmul_unit (tiling controller + version 5 engine)
 # placed and wired on SKY130 with OpenROAD, then timing and power measured on
 # the real wires. Free tools only.
-# Usage: tools/w2_layout.sh [N] [CLOCK_PERIOD_NS] [LABEL]
+# Usage: [STAGE=place|route|all] tools/w2_layout.sh [N] [CLOCK_PERIOD_NS] [LABEL]
+#   place: synthesis, floorplan, placement, clock tree, global routing; saves
+#          build/layout/LABEL/groute.odb and reports with estimated wires
+#   route: detailed routing of that checkpoint, extraction, final reports
 # Needs: yosys, /opt/eda/bin/openroad (environment setup script) and the SKY130
 # platform files from OpenROAD-flow-scripts in build/pdk/sky130hd (fetched here
 # if missing; not stored in the repository).
 set -e
+STAGE=${STAGE:-all}
 N=${1:-4}; PERIOD=${2:-10}; LABEL=${3:-mm${N}_p${PERIOD}}
 OPENROAD=${OPENROAD:-/opt/eda/bin/openroad}
 P=build/pdk/sky130hd
@@ -28,6 +32,7 @@ if [ ! -s $SLIB ]; then
   python3 tools/lib_dont_use.py $LIB $SLIB $DONT
 fi
 
+if [ $STAGE != route ]; then
 # 2. Synthesis: the same recipe as tools/w2_estimate.sh (parallel adders, same
 #    ABC script), plus the clean-ups a layout tool needs (constants as tie
 #    cells, no bare wire assignments).
@@ -43,7 +48,16 @@ yosys -p "read_verilog $RTL; chparam -set N $N matmul_unit; \
   write_verilog -noattr -noexpr -nohex -nodec $OUT/synth.v" > $OUT/synth.log 2>&1
 grep "Chip area" $OUT/synth_stat.txt | tail -1
 
-# 3. Layout and sign-off measurements
-PERIOD=$PERIOD PLATFORM=$P OUT=$OUT $OPENROAD -exit -no_init tools/w2_layout.tcl > $OUT/openroad.log 2>&1 \
-  || { tail -30 $OUT/openroad.log; exit 1; }
-cat $OUT/summary.txt
+
+# 3. Floorplan to global routing (checkpoint + first figures)
+PERIOD=$PERIOD PLATFORM=$P OUT=$OUT $OPENROAD -exit -no_init tools/w2_layout.tcl > $OUT/place.log 2>&1 \
+  || { tail -30 $OUT/place.log; exit 1; }
+cat $OUT/groute_summary.txt
+fi
+
+# 4. Detailed routing, real wire extraction, final figures
+if [ $STAGE != place ]; then
+PERIOD=$PERIOD PLATFORM=$P OUT=$OUT $OPENROAD -exit -no_init tools/w2_route.tcl > $OUT/route.log 2>&1 \
+  || { tail -30 $OUT/route.log; exit 1; }
+cat $OUT/final_summary.txt
+fi

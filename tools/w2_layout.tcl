@@ -6,6 +6,8 @@ set P      $::env(PLATFORM)
 set OUT    $::env(OUT)
 set PERIOD $::env(PERIOD)
 set LIB    $P/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+source [file dirname [info script]]/w2_reports.tcl
+set_thread_count [exec nproc]
 
 read_lef $P/lef/sky130_fd_sc_hd.tlef
 read_lef $P/lef/sky130_fd_sc_hd_merged.lef
@@ -66,39 +68,11 @@ set_routing_layers -signal met1-met5 -clock met3-met5
 global_route -congestion_report_file $OUT/congestion.rpt -allow_congestion
 estimate_parasitics -global_routing
 repair_timing -setup -hold -hold_margin 0.05
-global_route -allow_congestion
-detailed_route -output_drc $OUT/route_drc.rpt -droute_end_iter 30 -verbose 0
-filler_placement {sky130_fd_sc_hd__fill_1 sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_4 sky130_fd_sc_hd__fill_8}
+global_route -allow_congestion -congestion_report_file $OUT/congestion2.rpt
+estimate_parasitics -global_routing
 
-# Real wires: extract resistance and capacitance from the routed layout
-define_process_corner -ext_model_index 0 X
-extract_parasitics -ext_model_file $P/rcx_patterns.rules
-write_spef $OUT/final.spef
-read_spef $OUT/final.spef
-write_def $OUT/final.def
-write_verilog $OUT/final.v
-
-# Reports
-report_checks -path_delay max -format full_clock_expanded -digits 3 > $OUT/timing_setup.rpt
-report_checks -path_delay min -digits 3 > $OUT/timing_hold.rpt
-report_clock_skew -digits 3 > $OUT/clock_skew.rpt
-set f [open $OUT/summary.txt w]
-set wns [sta::worst_slack_cmd max]
-set hold [sta::worst_slack_cmd min]
-set crit [expr $PERIOD - $wns]
-puts $f "Clock period asked: $PERIOD ns"
-puts $f "Worst setup slack:  [format %.3f $wns] ns"
-puts $f "Worst hold slack:   [format %.3f $hold] ns"
-puts $f "Achievable clock:   [format %.1f [expr 1000.0 / $crit]] MHz (period [format %.3f $crit] ns)"
-close $f
-report_design_area >> $OUT/summary.txt
-set dbu [[ord::get_db_block] getDbUnitsPerMicron]
-set die [[ord::get_db_block] getDieArea]
-set f [open $OUT/summary.txt a]
-puts $f "Die: [format %.1f [expr ([$die dx] / double($dbu))]] x [format %.1f [expr ([$die dy] / double($dbu))]] um"
-puts $f "Routing DRC violations: [detailed_route_num_drvs]"
-close $f
-foreach act {0.1 0.2 0.5} {
-  set_power_activity -input -activity $act
-  report_power -digits 4 > $OUT/power_act$act.rpt
-}
+# Checkpoint for stage 2 (tools/w2_route.tcl), and first figures with wires
+# estimated from global routing
+write_db $OUT/groute.odb
+write_sdc $OUT/groute.sdc
+w2_reports $OUT groute $PERIOD
