@@ -5,6 +5,7 @@ set P      $::env(PLATFORM)
 set OUT    $::env(OUT)
 set PERIOD $::env(PERIOD)
 source tools/w2_reports.tcl
+source tools/w2_extract.tcl
 set_thread_count [exec nproc]
 
 read_lef $P/lef/sky130_fd_sc_hd.tlef
@@ -21,14 +22,12 @@ filler_placement {sky130_fd_sc_hd__fill_1 sky130_fd_sc_hd__fill_2 sky130_fd_sc_h
 write_db $OUT/final.odb
 
 # Real wires: resistance and capacitance extracted from the routed layout
-define_process_corner -ext_model_index 0 X
-extract_parasitics -ext_model_file $P/rcx_patterns.rules
-write_spef $OUT/final.spef
-read_spef $OUT/final.spef
+set nskip [w2_extract $P $OUT]
 write_def $OUT/final.def
 write_verilog $OUT/final.v
 
 w2_reports $OUT final $PERIOD
 set f [open $OUT/final_summary.txt a]
 puts $f "Routing rule violations left: [detailed_route_num_drvs]"
+puts $f "Nets timed without wire parasitics (shorts): $nskip"
 close $f
