@@ -38,19 +38,35 @@ module fp32_s1a_unpack (
 );
     reg signed [12:0] e_a, e_x, d;
     reg               az, xz, x_top;
+    // lo[k] = 1 if any bit of x below bit k is 1, built as a tree (6 levels,
+    // Kogge-Stone style). It gives both the magnitude (-x keeps x's bits up
+    // to its lowest 1 and flips the rest: m_x[k] = x[k] ^ lo[k]) and the zero
+    // check (x = 0 when no bit is 1). Written as "x[47] ? -x : x" and
+    // "x == 0", synthesis built it as a chain of 48 one-after-another ORs,
+    // the slowest step of the first layout (docs/RESULTS.md, 2026-11-25).
+    reg        [47:0] lo, lo_n;
+    integer           k, w;
+    always @(*) begin
+        lo = {x[46:0], 1'b0};
+        for (w = 1; w < 48; w = w * 2) begin
+            lo_n = lo;
+            for (k = w; k < 48; k = k + 1) lo_n[k] = lo[k] | lo[k - w];
+            lo = lo_n;
+        end
+    end
     always @(*) begin
         inf = (acc[30:23] == 8'hFF);
         s_a = acc[31];
         m_a = (acc[30:23] == 8'd0) ? {1'b0, acc[22:0]} : {1'b1, acc[22:0]};
         e_a = (acc[30:23] == 8'd0) ? -13'sd149 : $signed({5'd0, acc[30:23]}) - 13'sd150;
         s_x = x[47];
-        m_x = x[47] ? -x : x;
+        m_x = x ^ ({48{x[47]}} & lo);    // = x[47] ? -x : x
         e_x = {{2{e[10]}}, e};
         // The window is lined up on whichever number reaches higher: x spans
         // 48 bits above 2^e_x, acc 24 bits above 2^e_a. A zero never decides.
         // (Written with one subtraction, d, so the exponent maths is short.)
         az = (acc[30:0] == 31'd0);
-        xz = (x == 48'sd0);
+        xz = !(lo[47] | x[47]);         // = (x == 0)
         d  = e_x - e_a;
         x_top = az || (!xz && (d >= -13'sd24));
         sh_x = x_top ? 13'sd33 : d + 13'sd57;
