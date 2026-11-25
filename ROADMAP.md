@@ -114,6 +114,12 @@ deliberately planted bugs, real model data.
 - [x] First step: engine mapped onto real cell libraries (SKY130, open 45 nm)
       with free tools: area and logic-only clock speed; slow paths found and
       fixed (`tools/w2_estimate.sh`, D-019)
+- [ ] Layout tools: the environment's setup script now installs OpenROAD,
+      KLayout, Magic and Netgen from the litex-hub conda channel into
+      /opt/eda (micromamba from conda-forge, checksum-verified; approved
+      2026-11-25). Untested until a fresh session: check /opt/eda/bin/openroad
+      and /opt/eda-setup.log. Not used: the "openroad" package on PyPI
+      (no author, no build record). Ubuntu packages lack OpenROAD.
 - [ ] Full layout flow (OpenLane / OpenROAD) on SKY130 or GF180: placement,
       wiring, real clock speed and power. Watch for what hobby designs hit
       here (community input, 2026-11-24): wiring congestion around wide
