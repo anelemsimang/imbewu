@@ -201,3 +201,15 @@ Accuracy below 2^-21 relative; whole-model perplexity +6.88% vs +6.54%
 before (FP8 weights). Chosen over fused multiply-add alone (smaller gain)
 and over more lanes (more area, same instruction count). The same 1:N
 ratio of vector lanes to engine multiply-adds as TPUv2 at N = 16.
+
+### D-025 - Layout flow: OpenROAD from litex-hub, no `dc2` in logic synthesis
+The layout tools come from the litex-hub conda channel, with Anaconda's
+main channel added for the older libraries OpenROAD 2.0-12381 needs (the
+channel's own build cannot be solved without it; Anaconda's terms apply
+to that channel). Chosen over building OpenROAD from source (hours per
+fresh session) and over the "openroad" PyPI package (no author, no build
+record). In logic synthesis ABC's `dc2` step is dropped: it rebuilt the
+Kogge-Stone adders of D-019 as ripple chains and halved the clock (about
+52 MHz instead of 106 MHz on the first layout). Slow and fast corner
+libraries come from litex-hub's open_pdks.sky130a package, checked against
+its published SHA-256.

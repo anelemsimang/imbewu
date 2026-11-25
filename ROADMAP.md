@@ -114,17 +114,23 @@ deliberately planted bugs, real model data.
 - [x] First step: engine mapped onto real cell libraries (SKY130, open 45 nm)
       with free tools: area and logic-only clock speed; slow paths found and
       fixed (`tools/w2_estimate.sh`, D-019)
-- [ ] Layout tools: the environment's setup script now installs OpenROAD,
-      KLayout, Magic and Netgen from the litex-hub conda channel into
-      /opt/eda (micromamba from conda-forge, checksum-verified; approved
-      2026-11-25). Untested until a fresh session: check /opt/eda/bin/openroad
-      and /opt/eda-setup.log. Not used: the "openroad" package on PyPI
-      (no author, no build record). Ubuntu packages lack OpenROAD.
-- [ ] Full layout flow (OpenLane / OpenROAD) on SKY130 or GF180: placement,
-      wiring, real clock speed and power. Watch for what hobby designs hit
-      here (community input, 2026-11-24): wiring congestion around wide
-      buses, clock skew across the grid, and power-supply droop when every
-      multiplier switches at once
+- [x] Layout tools: OpenROAD, KLayout, Magic and Netgen in /opt/eda from
+      the litex-hub conda channel plus Anaconda's main channel for the
+      libraries it needs (micromamba from conda-forge, checksum-verified).
+      Installed by hand on 2026-11-25; the corrected setup script is
+      unproven until a fresh session (check /opt/eda-setup.log). Not used:
+      the "openroad" package on PyPI (no author, no build record)
+- [x] Full layout of the 4x4 engine on SKY130 with OpenROAD (2026-11-25,
+      `tools/w2_layout.sh`): about 106 MHz typical, 49 MHz slow corner,
+      0.66 mm² of gates on a 1.155 mm² die, about 0.1 W (RESULTS.md)
+- [ ] Layout clean-up: zero wiring rule violations (15 left), slowest step
+      fixed (48-bit zero check built as a chain), registers on the address
+      outputs, timing repair at the slow and fast corners together, power
+      from a simulation trace
+- [ ] Larger engines (8x8, 16x16) and the whole tile through the layout.
+      Watch for what hobby designs hit here (community input, 2026-11-24):
+      wiring congestion around wide buses, clock skew across the grid, and
+      power-supply droop when every multiplier switches at once
 - [ ] Scale those numbers to modern processes using published industry data,
       clearly labelled as estimates
 - [ ] List of blocks that must be licensed (HBM interface, high-speed links,

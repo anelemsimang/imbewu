@@ -1411,3 +1411,82 @@ before reset took effect, when the write signal can start at 1. The test
 bench now counts writes only after reset. The design itself was fine (an
 answer write during reset lands in memory that is written again before it
 is read).
+
+## 2026-11-25 - First full layout of the 4x4 engine on SkyWater 130 nm (W2)
+
+**What was done.** The 4x4 engine with its tiling controller (`matmul_unit`,
+N = 4) went through a complete layout with free tools: OpenROAD
+2.0-12381 (litex-hub build) on the open SkyWater 130 nm process (SKY130,
+`sky130_fd_sc_hd` cells). Steps: logic to cells (Yosys + ABC), floorplan
+(cells cover 45% of the core), power grid, placement, clock tree, timing
+repair, global and detailed wiring, extraction of the real resistance and
+capacitance of every wire, then timing and power. Asked clock: 8 ns
+(125 MHz). Scripts: `tools/w2_layout.sh` (stage 1 `place`, stage 2
+`route`), `tools/w2_finish.sh`, `tools/w2_corner.sh`, `tools/w2_paths.tcl`;
+outputs in `build/layout/mm4_p8` (not in git; about 2 h 45 min of wiring).
+
+Three chips are timed: **typical** (25 C, 1.80 V), **slow** (a slow batch of
+silicon, hot at 100 C, supply low at 1.60 V: the speed one can promise for
+every chip) and **fast** (cold at -40 C, 1.95 V: where signals arriving *too
+early* can break things). Only the gates change between them; the wires keep
+their typical values (one wire model is available), so the slow figure is a
+little optimistic.
+
+| | Typical | Slow | Fast |
+|---|---|---|---|
+| Slowest path inside the engine | 9.29 ns | 20.34 ns | 5.85 ns |
+| **Clock it can run at** | **about 106 MHz** | **about 49 MHz** | about 137 MHz (171 inside) |
+| Hold check, register to register | +0.185 ns, passes | +0.481 ns, passes | +0.072 ns, passes |
+| Hold check, inputs to registers | +0.33 ns | **-0.47 ns, fails** | +0.68 ns |
+| Power at 125 MHz, inputs switching 10% / 20% / 50% of ticks | 93 / 120 / 193 mW | 73 / 95 / 152 mW | 108 / 139 / 223 mW |
+
+Area: the gates take **0.66 mm²** (658,620 µm²: 6,278 flip-flops and the
+logic, buffers and clock tree); the die is 1.07 x 1.07 mm, **1.155 mm²**,
+the rest being room for wiring and the power grid (filled with filler
+cells). Logic synthesis alone gave 500,588 µm²; the layout adds 32%, mostly
+buffers that timing repair inserts to drive long wires, and the clock tree.
+Power splits about 34% flip-flops, 43% logic, 24% clock tree (typical, 20%).
+Clock skew (how unevenly the clock reaches the 6,278 flip-flops) 0.20 ns.
+
+**In plain words.** A typical chip from this layout would run the engine at
+about 106 million ticks a second, and about 49 million is what every chip
+could be promised. It is about 1 mm on a side in a 2001-era process and
+uses roughly a tenth of a watt. Power is the least certain number: the tool
+has no simulation trace here, so it assumes how often signals switch.
+
+**What limits the speed.** The slowest path at every corner is the same
+small piece: step S1a of the shared FP32 adder (`fp32_s1a_unpack`), from the
+hand-off register `q0_x` to `q1_B`. It checks whether the 48-bit sum is zero
+and flips its sign. Logic synthesis built both as one long chain of 18
+three-input OR gates (each waits for the one before), about 6.5 ns of the
+9.3 ns. Written as a tree it would be about 4 gates deep. This is the same
+kind of problem as the ripple adders found earlier (D-019): ABC rebuilds
+chains from wide operations. Fixing it is the next step; the engine's other
+paths are not yet measured behind it.
+
+**Other findings.**
+- The slowest path overall at the typical corner (9.43 ns) runs straight
+  from a setting input (`cfg_beats`) to a memory address output (`a_addr`)
+  with no register in between. It depends on the assumed time outside the
+  chip (20% of the tick on each side), so it is reported but not counted as
+  the engine's speed. A register on the address outputs would remove it.
+- The slow-corner hold failure (-0.47 ns) is also at the inputs (`b_data`
+  into the engine), where the slow clock tree reaches the flip-flops late.
+  It comes from the same assumed outside timing; timing repair here ran at
+  the typical corner only. Repair at several corners at once fixes it.
+- ABC's `dc2` step turned the Kogge-Stone adders (D-019) back into ripple
+  chains: with it, the first layout ran at about 52 MHz. It is now left out
+  of `tools/w2_abc.script`; logic-only figures change with it (matmul_unit
+  7.46 ns, systolic_v5 7.1 ns, area about 7% larger), and the 8.3 ns of
+  2026-11-22 cannot be reproduced with today's tools.
+
+**What is not finished.**
+- Wiring ended with **15 rule violations** (5 shorts, 7 metal spacing, 3
+  via spacing) out of about 70,000 connections, down from 100,066 on the
+  first pass. A layout to manufacture needs zero; usually a little more
+  space in the crowded spots clears them.
+- The wire measurement (OpenRCX) stops on a wire touching another pin. 9
+  connections were set aside and timed as if their wire were perfect
+  (`extract_skipped_nets.txt`); none is on the slowest internal path.
+- Detailed wiring takes 2 h 45 min on 4 cores, more than one background job
+  may run here, so it was run detached.
