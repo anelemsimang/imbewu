@@ -46,7 +46,9 @@ module tb_matmul_unit;
 
     reg [1023:0] pre;
     integer cyc = 0, t0, t1, n, rows, errors = 0, writes = 0;
-    always @(posedge clk) begin cyc <= cyc + 1; if (c_we) writes = writes + 1; end
+    // count the engine's answer writes once reset is over (during reset its
+    // outputs may hold any start-up value, as on real silicon)
+    always @(posedge clk) begin cyc <= cyc + 1; if (c_we && !rst) writes = writes + 1; end
     initial begin
         if (!$value$plusargs("PRE=%s", pre)) begin $display("need +PRE="); $finish; end
         $readmemh({pre, "_cfg.hex"}, cfg);
