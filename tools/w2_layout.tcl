@@ -6,7 +6,7 @@ set P      $::env(PLATFORM)
 set OUT    $::env(OUT)
 set PERIOD $::env(PERIOD)
 set LIB    $P/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
-source [file dirname [info script]]/w2_reports.tcl
+source tools/w2_reports.tcl
 set_thread_count [exec nproc]
 
 read_lef $P/lef/sky130_fd_sc_hd.tlef
