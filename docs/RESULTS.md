@@ -1391,6 +1391,18 @@ real silicon does. Each test ran with several different random starts.
 |---|---|---|---|---|
 | 4x4 | 5 (FP8, INT8, FP4, two mixed) | 5 | all 25 bit exact, written design too | identical |
 | 8x8 | 3 (FP8, FP4, FP8 x FP4) | 3 | all 9 bit exact | identical (792, 216, 408) |
+| 16x16 | 2 (FP8 x FP4, FP4) | 2 | all 4 bit exact | identical (552, 104) |
+
+Sizes as gates (engine + tiling controller): 4x4 89,325; 8x8 275,606;
+**16x16 982,700** (one engine cell 778 gates, one multiplier 2,211, the
+shared FP32 adders the rest). The 16x16 conversion first ran out of memory
+after 42 minutes when flattened into one circuit; keeping the design's
+structure (each repeated cell converted once, the normal practice for
+large chips) took 3.5 minutes. `LARGE=1 make gate` reruns all of this.
+
+**What it shows.** The engine behaves the same as gates at every size we
+test, 4x4 to 16x16, with any start-up values, so nothing in it depends on
+size in a way the smaller tests could miss.
 
 **Found on the way, in the test bench.** With random start values some
 runs reported one error although every answer word was right: the test

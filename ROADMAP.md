@@ -100,7 +100,8 @@ deliberately planted bugs, real model data.
 - [x] Gate-level simulation: tests rerun on the gates Yosys builds
       (`make gate`; `FULL=1` adds arbiter, vector unit, whole tile): all bit
       exact; found and fixed an unset counter in tile v4
-- [ ] Gate level at 8x8 and 16x16 (Verilator, fast)
+- [x] Gate level at 8x8 and 16x16 (Verilator, random start values): bit
+      exact, identical timing; 16x16 = 982,700 gates
 - [ ] Vector unit v2 size: narrower correction multipliers or a shared
       2^x / 1/x unit (v2 is 2x the gates of v1)
 - [ ] Gate-level runs with wire delays, after a layout flow (W2)

@@ -38,7 +38,33 @@ done <<LIST
 4 3 3 2 1 2
 4 2 2 1 0 2
 LIST
-[ "$FULL" = 1 ] || { echo "gate level: all PASS (FULL=1 adds the arbiter, the vector unit and the tile)"; exit 0; }
+# LARGE=1: the engine at 8x8 and 16x16, keeping the design's structure
+# (each repeated cell converted once; flattening 16x16 ran out of memory),
+# run in Verilator with every register starting at a random value
+if [ "$LARGE" = 1 ]; then
+  for N in 8 16; do
+    yosys -q -p "read_verilog rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v rtl/matmul_unit.v; chparam -set N $N matmul_unit; synth -top matmul_unit; opt_clean; write_verilog -noattr $OUT/matmul${N}_gl.v" 2>/dev/null
+    verilator --binary --timing -Wno-fatal -Wno-lint -Wno-style -DGRID_N=$N -DGATE --top-module tb_matmul_unit \
+      -Mdir $OUT/v$N -o tb $OUT/matmul${N}_gl.v $CELLS tests/tb_matmul_unit.v -j 3 > $OUT/v$N.log 2>&1
+  done
+  while read N MT NT KB FA FB; do
+    [ -z "$N" ] && continue
+    pre=$OUT/t_${N}_${MT}x${NT}_k${KB}_${FA}${FB}
+    python3 tools/gen_tile_vectors.py $N $MT $NT $KB $FA $FB $pre > /dev/null
+    for seed in 1 2; do
+      log=$($OUT/v$N/tb +verilator+rand+reset+2 +verilator+seed+$seed +PRE=$pre)
+      echo "[gates ${N}x${N}, random start $seed, fmt $FA x $FB] $(echo "$log" | grep -E '^MATMUL' | head -1)"
+      echo "$log" | grep -q '^PASS' || { echo "FAIL: gate-level ${N}x${N} engine $pre"; exit 1; }
+    done
+  done <<LIST
+8 3 2 4 1 1
+8 2 2 3 2 2
+8 2 3 2 1 2
+16 2 2 4 1 2
+16 2 1 2 2 2
+LIST
+fi
+[ "$FULL" = 1 ] || { echo "gate level: all PASS (FULL=1 adds the arbiter, the vector unit and the tile; LARGE=1 the 8x8 and 16x16 engines)"; exit 0; }
 # 3. memory arbiter + broadcast (4 requesters, 2 channels, 16-entry list of
 #    reads in flight; Yosys's memory-sharing step is skipped: it only
 #    optimises, and runs out of memory on this design)
