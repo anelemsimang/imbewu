@@ -1686,3 +1686,22 @@ than HBM. These shares go into the whole-chip performance model (step 5).
 The sizing for the full chip (D-030): memory controllers on all four edges
 and 64-byte words, and the middle of the network needs checking under full
 load.
+
+## 2026-11-26 - ASAP7 layout with each cell sending its finished sum (W2)
+
+Same flow as the first ASAP7 layout; the only change is that each cell
+hands the shared adder its finished block sum (D-027 follow-up). Outputs in
+`build/layout/mm4_asap7_p075c` (the tree multiplier came after this run).
+
+| | Typical (TT) | Slow (SS) | Fast (FF) |
+|---|---|---|---|
+| Slowest path inside the engine | 0.975 ns (was 1.013) | 1.442 ns (was 1.473) | 0.722 ns (was 0.760) |
+| **Clock inside the engine** | **about 1,026 MHz** | **about 693 MHz** | about 1,385 MHz |
+| Hold, register to register | +0.012 ns | +0.029 ns | +0.002 ns (now passes) |
+
+Gates 10,398 µm² (2.4% less), 108 wiring violations. Now the multiplier's
+first half is the slowest path at every corner.
+
+**Progress score (D-026 scale).** 16 cells x 1,026 MHz = 16.4 billion per
+second: **0.00016** (0.000158 -> 0.000164; the adder-input change moved
+it by 4%).
