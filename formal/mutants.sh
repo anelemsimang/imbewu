@@ -93,7 +93,7 @@ mutate $Q "block total not cleared at block end"      '72s/partial <= 48'"'"'sd0
 mutate $Q "FP32 total not cleared between jobs"       '75s/acc <= 32'"'"'d0;/acc <= acc;/' v4
 echo "version 5 engine:"
 P5=rtl/pe_v5.v; S5=rtl/systolic_v5.v
-mutate $S5 "shared adder answers the wrong cell"            's/(p_who == j - J0)/(p_who == J1 - 1 - j)/' v5
+mutate $S5 "shared adder answers the wrong cell"            's/(q5_who == j - J0)/(q5_who == J1 - 1 - j)/' v5
 mutate $P5 "block total not cleared at block end"            's/if (v_r) partial <= be_r ? 48'"'"'sd0 : x;/if (v_r) partial <= x;/' v5
 mutate $P5 "FP32 total not cleared between jobs"             's/                    acc <= 32'"'"'d0;/                    acc <= wb_sum;/' v5
 mutate $S5 "rows read out one tick too early"                's/localparam LAT = 6;/localparam LAT = 5;/' formal5
