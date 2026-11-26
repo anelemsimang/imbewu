@@ -84,7 +84,7 @@ mutate $S "row number not advanced"                  's/rd_row      <= rd_row + 
 echo "version 4 engine:"
 M=rtl/mx_mul.v; F=rtl/fp32_add_fx.v; Q=rtl/pe_v4.v
 mutate $M "mixed job: FP4 side reads the wrong half of its lane"  's/2'"'"'d2: dec = dec4(hi ? x\[7:4\] : x\[3:0\]);/2'"'"'d2: dec = dec4(hi ? x[3:0] : x[7:4]);/' mul
-mutate $F "FP32 rounding: ties always rounded up"     's/(g \&\& (st || n_wide\[0\]))/(g)/' fadd
+mutate $F "FP32 rounding: ties always rounded up"     's/(g \&\& (st || n0\[0\]))/(g)/' fadd
 mutate $F "FP32 rounding: sticky bits ignored"        's/st = |(R \& ~({83{1'"'"'b1}} << (s - 1)));/st = 1'"'"'b0;/' fadd
 mutate $F "FP32 overflow not turned into infinity"    's/biased >= 13'"'"'sd255/biased >= 13'"'"'sd256/' fadd
 mutate $F "FP32 smallest step (subnormals) wrong"     's/s_min = -13'"'"'sd149 - B;/s_min = -13'"'"'sd148 - B;/' fadd
