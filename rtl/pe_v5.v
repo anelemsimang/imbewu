@@ -38,6 +38,7 @@ module pe_v5 (
     output reg  [7:0]         sb_out,
     // request to the shared FP32 adder
     output wire               req_v,
+    output wire [7:0]         req_sel,    // 8 copies of req_v, for the adder's input select
     output wire               req_jl,
     output wire signed [47:0] req_part,   // block total so far (the adder adds req_p)
     output wire signed [47:0] req_p,      // this tick's product
@@ -74,6 +75,12 @@ module pe_v5 (
     wire signed [47:0] x = partial + p_r;
 
     assign req_v   = v_r & be_r;
+    // The adder's input select is steered by these copies of req_v, each
+    // driving about one eighth of the ~140 request bits, instead of one
+    // flip-flop driving all of them (first ASAP7 layout, D-027). keep: the
+    // synthesis tool must not merge them back into one.
+    (* keep *) reg [7:0] sel_r;
+    assign req_sel = sel_r;
     assign req_jl  = jl_r;
     assign req_part = partial;
     assign req_p    = p_r;
@@ -93,7 +100,7 @@ module pe_v5 (
         jl_r   <= jl_r1;
         if (rst) begin
             v_out <= 1'b0; bl_out <= 1'b0; jl_out <= 1'b0;
-            v_r1 <= 1'b0; v_r <= 1'b0;
+            v_r1 <= 1'b0; v_r <= 1'b0; sel_r <= 8'd0;
             partial <= 48'sd0;
             acc <= 32'd0;
             res <= 32'd0;
@@ -103,6 +110,7 @@ module pe_v5 (
             jl_out <= jl_in;
             v_r1   <= v_in;
             v_r    <= v_r1;
+            sel_r  <= {8{v_r1 & be_r1}};     // equals v_r & be_r, one tick later
             if (v_r) partial <= be_r ? 48'sd0 : x;
             if (wb_v) begin
                 if (wb_jl) begin
