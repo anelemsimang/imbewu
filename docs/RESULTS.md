@@ -1538,3 +1538,46 @@ to 6 ticks and needs the engine's hazard rules and tests checked again.
 the result of a wiring run varies this much between runs. It strengthens
 the case for giving crowded areas more room (lower cell density) before
 the next run.
+
+## 2026-11-26 - Layout with rounding step S4 split in two (W2)
+
+**What was changed.** The shared FP32 adder gets one more tick (6 -> 7
+ticks from request to new total). It was first placed on the hand-back
+to the cell, but stage 1 of the layout showed rounding step S4 itself was
+slow: the slowest path simply ended at the new register (about 9.4 ns).
+So S4 is now two steps, `fp32_s4a_shift` (shift into place, keep guard
+and sticky bits) and `fp32_s4b_pack` (round, pack, hand back), with the
+register between them. The split S4 is proven equal to the old one for
+every input (Yosys miter + SAT). Consequences: output rows leave N + 8 + r
+ticks after a job's last beat, and an MX block needs at least
+max(min(G, N), 7) beats (standard blocks are 16 or 32). The formal proofs
+of the engine (4x4 and 8x8, 2 to 8 cells per adder) and the tiling
+controller pass with the new rule, and fail if 6-beat blocks are allowed.
+`make test` passes (after installing PyTorch for `test-compile`) and
+`make mutants` catches 47 of 47 planted bugs; three mutations were updated
+to the new code, and a fourth (tile v3) had stopped applying earlier, in
+f4996d9, so the mutations after it had not run.
+
+| | Chain (first) | Tree (2nd) | **S4 split (3rd)** |
+|---|---|---|---|
+| Slowest internal path, typical | 9.29 ns | 9.34 ns | **9.09 ns** |
+| Slowest internal path, slow corner | 20.34 ns | 18.60 ns | 18.74 ns |
+| Slowest internal path, fast corner | 5.85 ns | 5.94 ns | 5.64 ns |
+| Clock, typical / slow / fast | 106 / 49 / 137 MHz | 106 / 54 / 137 MHz | **109 / 53 / 140 MHz** |
+| Hold, register to register, fast corner | +0.072 ns | +0.069 ns | +0.052 ns |
+| Hold, inputs to registers, slow corner | -0.47 ns | -0.47 ns | -0.44 ns |
+| Cell area | 658,620 µm² | 660,038 µm² | 655,186 µm² |
+| Die | 1.155 mm² | 1.165 mm² | 1.161 mm² |
+| Power, typical, 20% switching | 120 mW | 122 mW | 124 mW |
+| Wiring violations left | 15 | 45 | 33 |
+| Wiring time | 2 h 44 min | 3 h 43 min | 5 h 15 min (shared the machine with the tests) |
+
+**In plain words.** The adder is no longer what limits the speed. A
+typical chip gains about 3% (106 -> 109 MHz) and the slow-corner figure
+stays about 53 MHz. At every corner the slowest path is now the
+**multiplier inside each engine cell**: from the numbers coming in
+(`a_bus`, `b_bus`) to the product register `p`, about 30 gates in one
+tick. That is the next step to pipeline (D-026 target). Two of the 7
+connections timed without wire measurement lie on the typical-corner
+slowest path, so the 109 MHz figure is slightly optimistic; none is on the
+slow- or fast-corner path.
