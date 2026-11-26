@@ -285,3 +285,26 @@ scripts at a pinned commit, checked against `tools/w2_asap7.sha256`. ASAP7
 is timed at its typical corner (TT: 25 C, 0.70 V), slow (SS: 100 C, 0.63 V)
 and fast (FF: 0 C, 0.77 V). Many published ASAP7 results quote the fast
 corner (the flow's default); ours quote typical and slow, as for SKY130.
+
+### D-028 - On-chip network: a mesh of credit-based routers, XY routing
+Chosen for the about-500-tile target (D-026), replacing the central
+arbiter of `cluster.v`, which cannot reach hundreds of tiles in one tick.
+Each tile has a router (`rtl/noc_router.v`) wired to its four neighbours
+(`rtl/noc_mesh.v`): one flit (one word plus its destination) per link per
+tick, a small queue per input, credit-based flow control (send only when
+the next queue has room), round-robin choice per output, all outputs
+registered (one hop per link per tick, so the network's speed does not
+depend on its size). Routing is XY (east/west first, then north/south),
+which cannot deadlock; requests and answers will use two separate meshes,
+so answers can never be stuck behind requests (the usual cause of protocol
+deadlock). Memory controllers sit on the left and right edges. Single-flit
+packets: a flit carries one whole word, so there is no packet reassembly.
+Proven for one router at queue depths 2 and 4 (`formal/fv_noc_router.v`):
+no queue overflow, no lost or invented credits, the right turn for every
+flit, no flit lost or invented, and fairness (a waiting flit is passed
+over at most 4 times). Whole meshes are checked by random traffic
+(`make test-noc`). Not chosen: a ring (too slow for 500 stops),
+wormhole routing with multi-flit packets (more complex, and our words are
+already wide), adaptive routing (needs extra deadlock rules). Open: flit
+width for the chip (256 or 512 bits per word), and whether 2 ticks per hop
+(queue, then output register) must become 1 (bypass when the queue is empty).

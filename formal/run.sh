@@ -1,6 +1,6 @@
 #!/bin/sh
 # Formal proof of the engine's output rules (see formal/fv_*.v).
-# Usage: formal/run.sh N [v3|v4|v5|mm] [G]   (default v3; G = cells per shared adder, v5)
+# Usage: formal/run.sh N [v3|v4|v5|mm|noc] [G]   (noc: N = queue depth)   (default v3; G = cells per shared adder, v5)
 # Needs: yosys, yosys-smtbmc (come with Yosys) and the Yices solver
 #        (pip install yices-solver).
 #
@@ -15,7 +15,12 @@ BASE=$((2 * N + 4))       # base case depth: long enough for a whole job to come
 V=${2:-v3}
 G=${3:-2}
 PARAMS="chparam -set N $N"
-if [ "$V" = mm ]; then
+if [ "$V" = noc ]; then
+  TOP=fv_noc_router
+  SRC="${SYS:-rtl/noc_router.v}"
+  PARAMS="chparam -set D $N"
+  K=6; BASE=12
+elif [ "$V" = mm ]; then
   TOP=fv_matmul_unit
   SRC="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v ${SYS:-rtl/matmul_unit.v}"
   PARAMS="chparam -set N $N -set G $G"
@@ -35,7 +40,7 @@ else
 fi
 OUT=build/formal
 mkdir -p $OUT
-M=$OUT/${V}_${N}_$G.smt2
+M=$OUT/${V}_${N}_$G${SYS:+_m$$}.smt2   # planted-bug runs get their own file
 yosys -q -p "read_verilog -formal $SRC formal/$TOP.v; \
   $PARAMS $TOP; prep -flatten -top $TOP; opt_clean -purge; \
   memory_map; opt -fast; async2sync; dffunmap; write_smt2 $M" 2>/dev/null
@@ -46,5 +51,9 @@ CD=$((4 * N + 8)); [ "$V" = v5 ] && CD=$((4 * N + 10)); [ "$V" = mm ] && CD=$((4
 C=$(yosys-smtbmc -s yices -c -t $CD $M | status)
 [ "$V" = v5 ] && V="v5 (G=$G)"
 [ "$V" = mm ] && V="tiling controller (G=$G)"
-echo "formal $V ${N}x${N}: base case $B, induction step $I, back-to-back jobs reachable $C"
+[ "$V" = noc ] && V="network router (queue depth $N)"
+case "$V" in
+  network*) echo "formal $V: base case $B, induction step $I, two outputs busy at once reachable $C" ;;
+  *) echo "formal $V ${N}x${N}: base case $B, induction step $I, back-to-back jobs reachable $C" ;;
+esac
 [ "$B" = PASSED ] && [ "$I" = PASSED ] && [ "$C" = PASSED ]

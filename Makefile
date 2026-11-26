@@ -6,7 +6,7 @@ TRIALS := 1000
 
 .PHONY: gate lint test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-tile-v4 mutants-tile-v4 test-cluster mutants-cluster formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster test-noc
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -158,6 +158,10 @@ test-cluster:
 mutants-cluster:
 	tests/run_cluster_mutants.sh
 
+# On-chip network: random traffic on 4x4, 8x8 and 3x5 grids, every flit checked
+test-noc:
+	tests/run_noc_tests.sh
+
 # Gate-level simulation: tests rerun on the gates Yosys builds (slow)
 gate:
 	tests/run_gate_tests.sh
@@ -174,6 +178,7 @@ formal:
 	@for n in $(FORMAL_SIZES); do formal/run.sh $$n v3 || exit 1; formal/run.sh $$n v4 || exit 1; done
 	@formal/run.sh 4 v5 2 && formal/run.sh 4 v5 4 && formal/run.sh 8 v5 4 && formal/run.sh 8 v5 8
 	@formal/run.sh 4 mm 4 && formal/run.sh 8 mm 8 && formal/run.sh 16 mm 16
+	@formal/run.sh 2 noc && formal/run.sh 4 noc
 
 # Plant bugs on purpose and check the tests catch every one
 mutants:

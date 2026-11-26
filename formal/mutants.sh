@@ -62,6 +62,10 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         IMBEWU_VU=$PWD/$m python3 tests/run_vu_tests.py > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalmm ]; then
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = noc ]; then
+        rm -rf $OUT/noc; OUT=$OUT/noc NOC=$m tests/run_noc_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = formalnoc ]; then
+        SYS=$m formal/run.sh 2 noc > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
         SYS=$m formal/run.sh 4 v5 4 > /dev/null 2>&1 && r=missed || r=caught
     else
@@ -137,5 +141,11 @@ mutate $VU "floor of negative numbers not rounded down"  's/assign r_floor\[l\*3
 mutate $VU "2^n off by a factor of two"                  's/wire \[9:0\] be = nc + 10'"'"'sd127;/wire [9:0] be = nc + 10'"'"'sd126;/' vu
 mutate $VU "MAX returns the smaller number"              's/assign r_max\[l\*32 +: 32\] = a_lt_b ? b : a;/assign r_max[l*32 +: 32] = a_lt_b ? a : b;/' vu
 mutate $VU "lane sum leaves out half the lanes"          's/6'"'"'d8: vr\[vd\] <= {L{st\[LV\]\[0\]}};/6'"'"'d8: vr[vd] <= {L{st[LV-1][0]}};/' vu
+echo "on-chip network router (D-028):"
+NR=rtl/noc_router.v
+mutate $NR "Y before X (route north/south first)"          's/wire go_s = (dx == my_x) \&\& (dy > my_y);/wire go_s = (dy > my_y);/' noc
+mutate $NR "credit not spent when a flit is sent"           's/cred\[p\]  <= cred\[p\] - send\[p\] + out_credit\[p\];/cred[p]  <= cred[p] + out_credit[p];/' formalnoc
+mutate $NR "credit not returned when a flit leaves a queue" 's/in_credit\[p\] <= pop\[p\];/in_credit[p] <= 1'"'"'b0;/' noc
+mutate $NR "round robin stuck on one input"                 's/if (send\[p\]) last\[p\] <= sel\[p\];/if (send[p]) last[p] <= 3'"'"'d4;/' formalnoc
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]
