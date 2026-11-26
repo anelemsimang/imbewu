@@ -248,3 +248,19 @@ How the limits are handled (owner's discussion, 2026-11-26):
   peak, estimates are not silicon, and the network, power delivery and
   verification of a chip that size are the main risks). Manufacturing, a
   licensed HBM interface and a software stack are outside this target.
+
+The owner's 0-10 scale (how progress is reported to the owner):
+- 10 = NVIDIA H100. The score is 10 x (this design's peak 8-bit
+  multiplications per second / the H100's, about 1,000 trillion per
+  second; NVIDIA's "2,000 trillion" counts each multiply-add as two).
+- Peak = multiplier cells x multiplications per cell per tick x ticks per
+  second, using the slowest-path clock measured or estimated so far.
+- 2026-11-26 (start of the D-026 work): 4x4 engine, SKY130, 109 MHz, 16
+  cells: about 1.7 billion per second, so about 0.00001.
+- Target: about 4-8 on paper; a fair overall score about 3-5 (real use
+  rarely reaches peak; estimates are not silicon).
+- After every step that changes the cell count or the clock, the session
+  tells the owner the new score and what moved it, in plain language, and
+  logs it in docs/RESULTS.md. Other scores the owner has seen (basic ideas
+  6-7, checked to be correct 7-8, ready to manufacture 2, software 2-3)
+  are judgements, not formulas; update them only with a reason.
