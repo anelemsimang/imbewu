@@ -4,9 +4,9 @@ BUILD  := build
 SIZES  := 4 8 16
 TRIALS := 1000
 
-.PHONY: gate lint test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-tile-v4 mutants-tile-v4 test-cluster mutants-cluster formal mutants perf synth clean
+.PHONY: gate lint test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-drain test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-tile-v4 mutants-tile-v4 test-cluster mutants-cluster formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster test-noc test-hbm test-fabric
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-drain test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster test-noc test-hbm test-fabric
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -96,6 +96,22 @@ test-v5:
 	    vvp -n $(BUILD)/v5/tb_v5_$$n +PRE=$(BUILD)/v5/v4_N$${n}_$$s > $(BUILD)/v5/log_$${n}_$$s.txt; \
 	    grep -E "errors|ticks" $(BUILD)/v5/log_$${n}_$$s.txt; \
 	    grep -q '^PASS' $(BUILD)/v5/log_$${n}_$$s.txt || exit 1; \
+	  done; \
+	done
+
+# Version 5 engine with results handed down the columns (DRAIN = 1, D-031):
+# right answers, and every output exactly N ticks after the plain engine's
+test-drain:
+	@mkdir -p $(BUILD)/drain
+	@for n in 4 8 16; do \
+	  jobs=30; [ $$n -ge 16 ] && jobs=8; \
+	  python3 tools/gen_v4_vectors.py $$n $(BUILD)/drain $$jobs 16 || exit 1; \
+	  iverilog -g2012 -DGRID_N=$$n -DV5 -DGROUP=16 -DDRAIN -o $(BUILD)/drain/tb_$$n \
+	    rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v tests/tb_systolic_v4.v || exit 1; \
+	  for s in $(V4_SCENARIOS); do \
+	    vvp -n $(BUILD)/drain/tb_$$n +PRE=$(BUILD)/drain/v4_N$${n}_$$s > $(BUILD)/drain/log_$${n}_$$s.txt; \
+	    grep -E "^DRAIN|errors" $(BUILD)/drain/log_$${n}_$$s.txt; \
+	    grep -q '^PASS' $(BUILD)/drain/log_$${n}_$$s.txt || exit 1; \
 	  done; \
 	done
 

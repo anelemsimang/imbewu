@@ -358,3 +358,29 @@ four edges (90 nodes) and (b) words become 64 bytes, or edge routers get
 two local ports. The middle of the mesh (21 links each way) is also
 close to full when every tile streams weights from HBM at once: the
 performance model (step 5) checks this before the design is fixed.
+
+### D-031 - The 32x32 engine as one block repeated 64 times; results handed down the columns
+A flat 32x32 engine (about 3.5 million gates) is too big for one layout run
+on the 4-core, 15 GB machine (the 4x4 engine's detailed routing alone
+took 70 minutes and 10.7 GB). So the engine is built from one block laid
+out once and repeated, as real chips are: `v5_blk` in `rtl/systolic_v5.v`,
+16 cells of a row and the FP32 adder they share (`v5_grp`, now a module
+of its own; nothing else changed). A 32x32 engine is 32 rows x 2 blocks.
+Each block's pins sit where its neighbours' pins are
+(`tools/w2_blk_pins.tcl`), so all wires between blocks are short.
+
+The mux read-out (one 32-way choice of a 1,024-bit row every tick) would
+bring all 32,768 result wires to one place, which does not scale. Option
+`DRAIN = 1` instead hands results down each column: each block keeps its
+row's results in the tick the mux would have read them (a row's first
+result can change again one tick later, so it must be caught then),
+puts them on the column's hand-down register two ticks per row later,
+and they reach the bottom in order. Every output (valid, row number,
+row) comes exactly N ticks later than the mux version's; jobs can still
+run back to back (row r enters the hand-down registers at tick
+2r + 1 and passes row k at r + k + 1, so two rows never meet in one register; worked out by hand and checked by the test, not yet by a proof).
+Cost: 1,024 extra flip-flops per block (17% of its 5,849); latency + N
+ticks at the end of each job (32 ns at 1 GHz, small against jobs of
+thousands of ticks). `DRAIN = 0` stays the default, so all existing tests
+and proofs apply unchanged; `make test-drain` checks `DRAIN = 1`
+against it tick for tick at 4x4, 8x8 and 16x16.

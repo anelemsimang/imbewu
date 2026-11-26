@@ -12,7 +12,8 @@ set_thread_count [exec nproc]
 
 w2_read_tech $P $W2_TYP
 read_verilog $OUT/synth.v
-link_design matmul_unit
+set TOP [expr {[info exists ::env(TOP)] ? $::env(TOP) : "matmul_unit"}]
+link_design $TOP
 
 # Timing constraints: one clock; memories and the C write port outside the
 # unit are given 20% of the clock period each side.
@@ -27,10 +28,23 @@ write_sdc $OUT/constraints.sdc
 
 # Floorplan: cells cover 45% of the core; the rest is room for wiring, buffers
 # added by timing repair, and the power grid.
-set UTIL [expr {[info exists ::env(UTIL)] ? $::env(UTIL) : 45}]
-initialize_floorplan -utilization $UTIL -aspect_ratio 1 -core_space $W2_CORE_SPACE -site $W2_SITE
+# CORE_WH="w h" (µm) sets the core size instead (a block that must fit a
+# grid, D-031); PINS names a script placing the pins instead of place_pins.
+if {[info exists ::env(CORE_WH)]} {
+  lassign $::env(CORE_WH) cw ch
+  set cs $W2_CORE_SPACE
+  initialize_floorplan -site $W2_SITE -die_area [list 0 0 [expr {$cw + 2 * $cs}] [expr {$ch + 2 * $cs}]] \
+    -core_area [list $cs $cs [expr {$cw + $cs}] [expr {$ch + $cs}]]
+} else {
+  set UTIL [expr {[info exists ::env(UTIL)] ? $::env(UTIL) : 45}]
+  initialize_floorplan -utilization $UTIL -aspect_ratio 1 -core_space $W2_CORE_SPACE -site $W2_SITE
+}
 source $W2_TRACKS
-place_pins -hor_layers [lindex $W2_PIN_LAYERS 0] -ver_layers [lindex $W2_PIN_LAYERS 1]
+if {[info exists ::env(PINS)]} {
+  source $::env(PINS)
+} else {
+  place_pins -hor_layers [lindex $W2_PIN_LAYERS 0] -ver_layers [lindex $W2_PIN_LAYERS 1]
+}
 w2_taps
 
 # Power grid

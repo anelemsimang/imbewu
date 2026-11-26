@@ -3,6 +3,7 @@
 # placed and wired with OpenROAD on SKY130 (default) or ASAP7 (PDK=asap7), then
 # timing and power measured on the real wires. Free tools only.
 # Usage: [PDK=sky130hd|asap7] [STAGE=place|route|all] [UTIL=45] [DENSITY=0.65]
+#        [TOP=matmul_unit|v5_blk] [CORE_WH="w h"] [PINS=tools/w2_blk_pins.tcl]
 #        tools/w2_layout.sh [N] [CLOCK_PERIOD_NS] [LABEL]
 #   UTIL: share of the core the cells cover at floorplan (%); DENSITY: target
 #   placement density. Process settings: tools/w2_pdk.tcl.
@@ -64,10 +65,14 @@ if [ $STAGE != route ]; then
 # 2. Synthesis: the same recipe as tools/w2_estimate.sh (parallel adders, same
 #    ABC script), plus the clean-ups a layout tool needs (constants as tie
 #    cells, no bare wire assignments).
+# TOP=v5_blk lays out one block of the hand-down engine (D-031; N is then
+# the cells in the block, GE)
+export TOP=${TOP:-matmul_unit}
 RTL="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v rtl/matmul_unit.v"
-yosys -p "read_verilog $RTL; chparam -set N $N matmul_unit; \
-  synth -top matmul_unit -flatten -run :fine; techmap -autoproc -map tools/w2_kogge_stone.v -map +/techmap.v; \
-  synth -top matmul_unit -flatten -run fine:; \
+PAR="-set N $N"; [ $TOP = v5_blk ] && PAR="-set GE $N"
+yosys -p "read_verilog $RTL; chparam $PAR $TOP; \
+  synth -top $TOP -flatten -run :fine; techmap -autoproc -map tools/w2_kogge_stone.v -map +/techmap.v; \
+  synth -top $TOP -flatten -run fine:; \
   dfflibmap -liberty $SLIB; abc -liberty $SLIB -script tools/w2_abc.script; \
   setundef -zero; splitnets; opt_clean -purge; \
   hilomap -singleton $TIE; \
