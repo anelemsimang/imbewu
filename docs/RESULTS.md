@@ -1491,3 +1491,50 @@ paths are not yet measured behind it.
   the typical or slow corner (one is on it at the fast corner).
 - Detailed wiring takes 2 h 45 min on 4 cores, more than one background job
   may run here, so it was run detached.
+
+## 2026-11-26 - Layout rerun with the zero check built as a tree (W2)
+
+**What was changed.** Step S1a of the shared FP32 adder (`fp32_s1a_unpack`
+in `rtl/fp32_add_fx.v`) now builds "is any lower bit of x set" as a
+6-level tree and takes both the magnitude of x and the zero check from it.
+Before, written as `x[47] ? -x : x` and `x == 0`, synthesis built a chain
+of 48 one-after-another ORs (previous section). The new module is proven
+to give the same outputs as the old one for every input (Yosys miter + SAT
+proof); `make test-fp32` (200,000 cases) and `make test-v5` (4x4, 8x8,
+16x16) pass. Same layout flow and settings as before; outputs in
+`build/layout/mm4_p8_tree`.
+
+| | Before (chain) | After (tree) |
+|---|---|---|
+| Slowest internal path, typical | 9.29 ns | 9.34 ns |
+| Slowest internal path, slow corner | 20.34 ns (49 MHz) | **18.60 ns (54 MHz)** |
+| Slowest internal path, fast corner | 5.85 ns | 5.94 ns |
+| Clock, typical (all paths) | 106.1 MHz | 106.4 MHz |
+| Hold, register to register (typ / slow / fast) | +0.185 / +0.481 / +0.072 ns | +0.176 / +0.466 / +0.069 ns |
+| Hold, inputs to registers, slow corner | -0.47 ns | -0.47 ns |
+| Cell area | 658,620 µm² | 660,038 µm² |
+| Die | 1.155 mm² | 1.165 mm² |
+| Power, typical, 10% / 20% / 50% switching | 93 / 120 / 193 mW | 94 / 122 / 199 mW |
+| Wiring time | 2 h 44 min | 3 h 43 min |
+| Wiring rule violations left | 15 | 45 (21 shorts) |
+| Connections timed without wire measurement | 9 | 6 (none on the slowest paths) |
+
+**In plain words.** The chain is gone, and the speed every chip could be
+promised (the slow corner) went up about 9%, from 49 to 54 MHz. A typical
+chip did not get faster: the next-slowest path was almost exactly as slow
+as the chain and now sets the limit at about 107 MHz inside the engine.
+Area and power are unchanged within 1-3%.
+
+**What now limits the speed.** At the typical and slow corners the slowest
+path starts at the last adder step's register (`q4_s`, step S4: rounding
+and packing the FP32 result) and ends in the engine cell's own registers:
+S4's rounding and the hand-back of the new total to the cell happen in one
+tick, about 32 gates deep, with no single long chain. The usual fix is to
+give the hand-back its own tick, which changes the adder's latency from 5
+to 6 ticks and needs the engine's hazard rules and tests checked again.
+
+**Wiring.** This run took an hour longer and ended with more violations
+(45 vs 15), from a slightly different placement of nearly the same gates:
+the result of a wiring run varies this much between runs. It strengthens
+the case for giving crowded areas more room (lower cell density) before
+the next run.

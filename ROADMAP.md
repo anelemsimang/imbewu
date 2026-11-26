@@ -123,10 +123,13 @@ deliberately planted bugs, real model data.
 - [x] Full layout of the 4x4 engine on SKY130 with OpenROAD (2026-11-25,
       `tools/w2_layout.sh`): about 106 MHz typical, 49 MHz slow corner,
       0.66 mm² of gates on a 1.155 mm² die, about 0.1 W (RESULTS.md)
-- [ ] Layout clean-up: zero wiring rule violations (15 left), slowest step
-      fixed (48-bit zero check built as a chain), registers on the address
-      outputs, timing repair at the slow and fast corners together, power
-      from a simulation trace
+- [x] Slowest step of the first layout fixed (48-bit zero check built as a
+      chain, now a tree; proven equal): slow corner 49 -> 54 MHz, typical
+      unchanged at about 106 MHz (2026-11-26)
+- [ ] Layout clean-up: zero wiring rule violations (45 left; lower cell
+      density), its own tick for the adder's hand-back to the cell (now the
+      slowest path), registers on the address outputs, timing repair at the
+      slow and fast corners together, power from a simulation trace
 - [ ] Larger engines (8x8, 16x16) and the whole tile through the layout.
       Watch for what hobby designs hit here (community input, 2026-11-24):
       wiring congestion around wide buses, clock skew across the grid, and
