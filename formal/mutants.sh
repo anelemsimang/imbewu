@@ -120,7 +120,7 @@ echo "tile version 3 (weights fetched ahead):"
 T3=rtl/tile_v3.v
 mutate $T3 "weight slot refilled while still in use"   's/if (j < kw \&\& j >= ncomp \&\& f_slot(cmds\[j\]) == wslot) slot_busy = 1'"'"'b1;/if (j < kw \&\& j >= ncomp \&\& f_slot(cmds[j]) == wslot) slot_busy = 1'"'"'b0;/' tilev3
 mutate $T3 "engine starts before its weights arrive"    's/(f_nb(cmds\[ncomp\[3:0\]\]) == 16'"'"'d0 || wready\[ncomp\[3:0\]\])) begin/1'"'"'b1) begin/' tilev3
-mutate $T3 "weights read from the wrong place"          's/iss <= 0; isb <= f_na(wcmd) + f_nsa(wcmd);/iss <= 0; isb <= f_na(wcmd);/' tilev3
+mutate $T3 "weights read from the wrong place"          's/: f_in(wcmd) + f_na(wcmd) + f_nsa(wcmd);/: f_in(wcmd) + f_na(wcmd);/' tilev3
 mutate $T3 "weights marked as arrived for the wrong command" 's/if (q_w\[qr\]) wready\[q_cmd\[qr\]\] <= 1'"'"'b1;/if (q_w[qr]) wready[q_cmd[qr] + 1] <= 1'"'"'b1;/' tilev3
 echo "tile + RISC-V core:"
 SC=rtl/tile_soc.v
