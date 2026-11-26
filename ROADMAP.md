@@ -110,6 +110,14 @@ deliberately planted bugs, real model data.
       low-cost boards, so a 4x4 tile demo may be affordable before funding;
       a board purchase is the founder's decision
 
+### Target (D-026, 2026-11-26)
+An H100-class chip design on paper: about 500 engines of 32x32, about
+1.2-1.6 GHz on ASAP7 (7 nm, predictive), on-chip memory and network, an
+HBM-speed memory model (about 3 TB/s, 80 GB), about 700 W. Steps: pipeline
+the multiplier; the layout flow on ASAP7; one 32x32 engine laid out as a
+tile; on-chip memory, memory controller and network; a whole-chip
+performance model running Qwen2.5-0.5B.
+
 ### W2 - Real physical numbers (limitation 4: no secret factory rules)
 - [x] First step: engine mapped onto real cell libraries (SKY130, open 45 nm)
       with free tools: area and logic-only clock speed; slow paths found and

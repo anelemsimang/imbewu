@@ -213,3 +213,17 @@ Kogge-Stone adders of D-019 as ripple chains and halved the clock (about
 52 MHz instead of 106 MHz on the first layout). Slow and fast corner
 libraries come from litex-hub's open_pdks.sky130a package, checked against
 its published SHA-256.
+
+### D-026 - New target: an H100-class design on paper
+Decided 2026-11-26 by the project owner. The target is a complete chip
+design, not manufactured, whose estimated peak is in the same league as
+NVIDIA's H100: about 500 engines of 32x32 (about 512,000 multiplier
+cells, two 4-bit products per cell), a clock of about 1.2-1.6 GHz, on-chip
+memory, a network between engines, and a memory interface modelled at
+HBM speed (about 3 TB/s, 80 GB) within a power budget of about 700 W.
+Modern-process numbers come from the open ASAP7 predictive 7 nm kit and
+published scaling data, labelled as estimates; the design (RTL) is kept
+separate from the process so it can be redone later on a real 4 nm kit.
+Whole-chip results come from exact checks of one engine and tile (gate
+level, formal proofs) plus a performance model, not from a gate-level
+simulation of every engine.
