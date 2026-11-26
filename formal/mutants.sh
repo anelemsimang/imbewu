@@ -64,6 +64,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         SYS=$m formal/run.sh 4 mm 4 > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = noc ]; then
         rm -rf $OUT/noc; OUT=$OUT/noc NOC=$m tests/run_noc_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = hbm ]; then
+        rm -rf $OUT/hbm; OUT=$OUT/hbm HBM=$m tests/run_hbm_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalnoc ]; then
         SYS=$m formal/run.sh 2 noc > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -147,5 +149,11 @@ mutate $NR "Y before X (route north/south first)"          's/wire go_s = (dx ==
 mutate $NR "credit not spent when a flit is sent"           's/cred\[p\]  <= cred\[p\] - send\[p\] + out_credit\[p\];/cred[p]  <= cred[p] + out_credit[p];/' formalnoc
 mutate $NR "credit not returned when a flit leaves a queue" 's/in_credit\[p\] <= pop\[p\];/in_credit[p] <= 1'"'"'b0;/' noc
 mutate $NR "round robin stuck on one input"                 's/if (send\[p\]) last\[p\] <= sel\[p\];/if (send[p]) last[p] <= 3'"'"'d4;/' formalnoc
+echo "HBM memory controller (D-029):"
+HC=rtl/hbm_ctrl.v
+mutate $HC "read issued one tick too soon after opening a row" 's/b_t_col\[bk\] <= T_RCD - 1;/b_t_col[bk] <= T_RCD - 2;/' hbm
+mutate $HC "a newer read overtakes an older write to the same word" 's/col_ok\[k\] = hit\[k\] \&\& !blocked\[k\]/col_ok[k] = hit[k]/' hbm
+mutate $HC "refresh never done"                              's/if (t_refi != 0) t_refi <= t_refi - 1'"'"'b1; else ref_due <= 1'"'"'b1;/if (t_refi != 0) t_refi <= t_refi - 1'"'"'b1;/' hbm
+mutate $HC "five row openings allowed in one tFAW window"     's/(n_faw < 4)/(n_faw < 5)/' hbm
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

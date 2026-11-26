@@ -308,3 +308,22 @@ wormhole routing with multi-flit packets (more complex, and our words are
 already wide), adaptive routing (needs extra deadlock rules). Open: flit
 width for the chip (256 or 512 bits per word), and whether 2 ticks per hop
 (queue, then output register) must become 1 (bypass when the queue is empty).
+
+### D-029 - HBM memory controller: one per pseudo-channel, first ready, first come
+`rtl/hbm_ctrl.v` drives one HBM pseudo-channel (16 banks in 4 groups).
+Every tick it issues a read or write for the oldest request whose row is
+already open, and an open or close for the oldest request whose bank can
+take one now ("FR-FCFS", the usual policy); it never closes a row a queued
+request still hits, keeps requests to the same word in order (a read
+after a write sees the new data), and refreshes on time. Row and column
+commands use separate buses, as in HBM. Address map {row, column high,
+bank, column low 2 bits}: a stream of words keeps all 16 banks busy.
+Every request gets one tagged answer (read data or write acknowledgement),
+possibly out of order, which suits the network (D-028). Timing parameters
+are HBM3-like values in ticks at about 1.2 GHz (estimates, not a datasheet).
+Checked against a DRAM model that tests every timing rule and the data
+(`make test-hbm`): 0 errors; data bus busy 89-91% when streaming, 33% on
+random reads (the four-activates-per-window rule caps random reads at
+40%), 35% on mixed random reads and writes. The HBM interface circuit
+(PHY) and the DRAM itself are licensed parts and are modelled, not built.
+A chip like the target has about 160 pseudo-channels (5 stacks x 32).
