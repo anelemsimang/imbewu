@@ -1581,3 +1581,33 @@ tick. That is the next step to pipeline (D-026 target). Two of the 7
 connections timed without wire measurement lie on the typical-corner
 slowest path, so the 109 MHz figure is slightly optimistic; none is on the
 slow- or fast-corner path.
+
+## 2026-11-26 - Two-tick multiply (D-027) and first ASAP7 placement (W2)
+
+**What was changed.** The engine cell's multiply now takes two ticks
+(`mx_mul_s1`: decode and multiply the significands; register; `mx_mul_s2`:
+shift and add). Every multiplier input checked (2,088,968 cases, 0
+errors); `make test-v5` bit exact at 4x4, 8x8, 16x16; all formal proofs
+pass (rows now leave N + 9 + r ticks after a job's last beat). The
+layout flow now runs on ASAP7 (`PDK=asap7`, D-027).
+
+**First ASAP7 placement** (4x4 `matmul_unit`, typical corner TT 25 C,
+0.70 V, 0.75 ns asked, wires estimated from global routing, before
+detailed wiring): logic alone 0.68 ns; with placement and estimated wires
+1.134 ns, **about 882 MHz**; 10,737 µm² of cells on a 0.023 mm² die
+(about 50x smaller than SKY130). The slowest path was not the multiplier:
+one request flip-flop per cell steered about 140 bits of the shared
+adder's input select through 500 ps of buffers. The select is now an
+AND-OR steered by 8 copies of the flag (formal proofs and `make test-v5`
+pass); its placement is being rerun.
+
+**Progress score (0-10 scale, D-026; 10 = H100 peak, about 1,000 trillion
+8-bit multiplications per second).** 16 cells x 1 multiplication per tick:
+- SKY130, last measured clock 109 MHz: 1.7 billion per second, **0.000017**.
+  The two-tick multiply does not change this yet: SKY130 has not been laid
+  out again, so its new clock is not measured.
+- ASAP7, 882 MHz (estimated wires, before the select fix): 14 billion per
+  second, **0.00014**. Moved by the process change (7 nm instead of
+  130 nm), not by the multiply change. Not yet a finished-layout figure.
+The score's big steps come later: 32x32 engines (64x the cells per
+engine) and about 500 engines (500x).
