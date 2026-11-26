@@ -6,7 +6,7 @@
 #                      on the bottom edge at the same x, inside column j's
 #                      share of the width (above and below cell j)
 #   cap, inj:          as the column pins, left of column 0
-#   clk, rst:          top edge, middle
+#   clk, rst:          top edge, middle (between columns GE/2 - 1 and GE/2)
 # Vertical pins on M7 and horizontal ones on M4: the power grid uses M1, M2,
 # M5 and M6 (tools/w2_pdk.tcl), so no pin can land on a power strap.
 lassign [ord::get_die_area] X0 Y0 X1 Y1
@@ -43,8 +43,8 @@ for {set j 0} {$j < $GE} {incr j} {
 }
 pair cap_in cap_out [expr {$X0 + 1.0}]
 pair inj_in inj_out [expr {$X0 + 1.5}]
-vpin clk [xt [expr {$X0 + $W / 2 + 0.5 * $slot}]] $Y1
-vpin rst [xt [expr {$X0 + $W / 2 + 0.5 * $slot + 2 * $step}]] $Y1
+vpin clk [xt [expr {$X0 + $W / 2}]] $Y1
+vpin rst [xt [expr {$X0 + $W / 2 + 2 * $step}]] $Y1
 for {set k 0} {$k < $AW} {incr k} {
   set y [yt [expr {$Y0 + $H / 2 + ($k - $AW / 2) * 0.192}]]
   hpin "a_in\[$k\]"  $X0 $y
