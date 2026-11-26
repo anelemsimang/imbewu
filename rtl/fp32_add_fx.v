@@ -190,22 +190,18 @@ module fp32_s3_norm (
 endmodule
 
 // ---- S4: shift, round to nearest even, pack -----------------------------
-module fp32_s4_round (
-    input  wire               inf,
-    input  wire               inf_sign,
-    input  wire               s_r,
+// S4 is written as two halves so a chip can give each its own tick
+// (systolic_v5.v): S4a shifts the total into place and keeps the guard and
+// sticky bits, S4b rounds and packs. fp32_s4_round joins them.
+module fp32_s4a_shift (
     input  wire [82:0]        R,
-    input  wire signed [7:0]  L,
-    input  wire signed [12:0] lsb_in,
     input  wire signed [12:0] s,
-    output reg  [31:0]        sum
+    output reg  [24:0]        n0,       // the kept bits, before rounding
+    output reg                g,        // first bit below them (guard)
+    output reg                st        // any bit below the guard (sticky)
 );
-    reg signed [12:0] lsb, biased;
-    reg        [82:0] n_wide;
-    reg        [24:0] n;
-    reg               g, st;
+    reg [82:0] n_wide;
     always @(*) begin
-        lsb = lsb_in;
         g = 1'b0; st = 1'b0;
         if (s <= 0) n_wide = R << (-s);
         else if (s > 83) begin                  // far below the smallest FP32 step
@@ -216,7 +212,26 @@ module fp32_s4_round (
             g = R[s - 1];
             st = |(R & ~({83{1'b1}} << (s - 1)));      // any bit below the guard bit
         end
-        n = n_wide[24:0] + ((g && (st || n_wide[0])) ? 25'd1 : 25'd0);
+        n0 = n_wide[24:0];
+    end
+endmodule
+
+module fp32_s4b_pack (
+    input  wire               inf,
+    input  wire               inf_sign,
+    input  wire               s_r,
+    input  wire [24:0]        n0,
+    input  wire               g,
+    input  wire               st,
+    input  wire signed [7:0]  L,
+    input  wire signed [12:0] lsb_in,
+    output reg  [31:0]        sum
+);
+    reg signed [12:0] lsb, biased;
+    reg        [24:0] n;
+    always @(*) begin
+        lsb = lsb_in;
+        n = n0 + ((g && (st || n0[0])) ? 25'd1 : 25'd0);
         if (n[24]) begin n = n >> 1; lsb = lsb + 13'sd1; end
         biased = lsb + 13'sd150;
 
@@ -226,6 +241,23 @@ module fp32_s4_round (
         else if (biased >= 13'sd255)      sum = {s_r, 8'hFF, 23'd0};       // overflow
         else                              sum = {s_r, biased[7:0], n[22:0]};
     end
+endmodule
+
+module fp32_s4_round (
+    input  wire               inf,
+    input  wire               inf_sign,
+    input  wire               s_r,
+    input  wire [82:0]        R,
+    input  wire signed [7:0]  L,
+    input  wire signed [12:0] lsb_in,
+    input  wire signed [12:0] s,
+    output wire [31:0]        sum
+);
+    wire [24:0] n0;
+    wire        g, st;
+    fp32_s4a_shift ua (.R(R), .s(s), .n0(n0), .g(g), .st(st));
+    fp32_s4b_pack  ub (.inf(inf), .inf_sign(inf_sign), .s_r(s_r), .n0(n0), .g(g), .st(st),
+                       .L(L), .lsb_in(lsb_in), .sum(sum));
 endmodule
 
 // ---- The whole adder in one tick: the four steps joined ------------------

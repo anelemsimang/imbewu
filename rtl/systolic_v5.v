@@ -5,11 +5,10 @@
 //    shares ONE FP32 adder. This works because cells in a row reach the end
 //    of a block one tick apart, so their requests arrive one after another.
 //  * Short steps for a fast clock: each cell does its multiply in its own
-//    tick (see pe_v5.v); the shared adder is a hand-off register, five
-//    one-tick steps (S1a, S1b, S2, S3, S4 in fp32_add_fx.v) and a hand-back
-//    register, so S4's rounding and the delivery of the new total to the
-//    cells get a tick each (the slowest path of the first SKY130 layout
-//    when they shared one, docs/RESULTS.md 2026-11-26).
+//    tick (see pe_v5.v); the shared adder is a hand-off register and six
+//    one-tick steps (S1a, S1b, S2, S3, S4a, S4b in fp32_add_fx.v). S4 was
+//    one tick until the second SKY130 layout showed it was the slowest
+//    path (docs/RESULTS.md 2026-11-26).
 // Output rows leave 7 ticks later than in version 4: row r appears
 // N + 8 + r ticks after the job's last beat.
 //
@@ -153,9 +152,8 @@ module systolic_v5 #(
                         end
                 end
                 // The shared adder: a hand-off register, then steps S1a, S1b,
-                // S2, S3 and S4 (rtl/fp32_add_fx.v), one tick each, then a
-                // hand-back register. The new total reaches the cell 6 ticks
-                // after the hand-off.
+                // S2, S3, S4a and S4b (rtl/fp32_add_fx.v), one tick each. The
+                // new total reaches the cell 6 ticks after the hand-off.
                 reg               q0_v, q0_jl;
                 reg        [47:0] q0_x;
                 reg        [10:0] q0_e;
@@ -219,17 +217,25 @@ module systolic_v5 #(
                     p_jl <= q3_jl; q4_inf <= q3_inf; q4_is <= q3_is; q4_sr <= q3_sr;
                     q4_R <= q3_R; q4_L <= d_L; q4_lsb <= d_lsb; q4_s <= d_s; p_who <= q3_who;
                 end
-                wire [31:0] e_sum;
-                fp32_s4_round u4 (.inf(q4_inf), .inf_sign(q4_is), .s_r(q4_sr), .R(q4_R), .L(q4_L),
-                                  .lsb_in(q4_lsb), .s(q4_s), .sum(e_sum));
-                // hand-back register: the new total goes to its cell next tick
-                reg               q5_v, q5_jl;
-                reg        [31:0] q5_sum;
+                // S4 in two halves with a register between them: S4a shifts,
+                // S4b rounds, packs and hands the new total back to its cell
+                wire [24:0] e_n0;
+                wire        e_g, e_st;
+                fp32_s4a_shift u4a (.R(q4_R), .s(q4_s), .n0(e_n0), .g(e_g), .st(e_st));
+                reg               q5_v, q5_jl, q5_inf, q5_is, q5_sr, q5_g, q5_st;
+                reg        [24:0] q5_n0;
+                reg signed [7:0]  q5_L;
+                reg signed [12:0] q5_lsb;
                 reg     [GW-1:0]  q5_who;
                 always @(posedge clk) begin
                     q5_v <= rst ? 1'b0 : p_v;
-                    q5_jl <= p_jl; q5_sum <= e_sum; q5_who <= p_who;
+                    q5_jl <= p_jl; q5_inf <= q4_inf; q5_is <= q4_is; q5_sr <= q4_sr;
+                    q5_n0 <= e_n0; q5_g <= e_g; q5_st <= e_st; q5_L <= q4_L; q5_lsb <= q4_lsb;
+                    q5_who <= p_who;
                 end
+                wire [31:0] q5_sum;
+                fp32_s4b_pack u4b (.inf(q5_inf), .inf_sign(q5_is), .s_r(q5_sr), .n0(q5_n0),
+                                   .g(q5_g), .st(q5_st), .L(q5_L), .lsb_in(q5_lsb), .sum(q5_sum));
                 assign wb_sum[i][g] = q5_sum;
                 assign wb_jl[i][g] = q5_jl;
                 for (j = J0; j < J1; j = j + 1) begin : back
