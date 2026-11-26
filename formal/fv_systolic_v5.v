@@ -1,7 +1,7 @@
 // fv_systolic_v5.v - formal checks of the version 5 engine.
 //
 //   R1  Every job produces exactly N output rows, rows 0..N-1 in order, row r
-//       appearing exactly N+8+r ticks after the job's last input beat.
+//       appearing exactly N+9+r ticks after the job's last input beat.
 //   R2  No output row ever appears that does not belong to a job.
 //   R4  Shared adders are never double-booked: in each group of cells that
 //       shares an FP32 adder, at most one cell asks for it in any tick, and
@@ -23,10 +23,11 @@ module fv_systolic_v5 #(parameter N = 4, parameter G = 2) (
     input wire [N*8-1:0] in_b_scale
 );
     localparam IW  = $clog2(N) + 1;
-    localparam LAT = 7;
+    localparam LAT = 8;                         // read-out delay vs version 4
+    localparam HZ  = 7;                         // ticks until a cell's new total is back
     localparam D   = 2 * N + LAT + 1;
     localparam GE  = (N < G) ? N : G;
-    localparam GB  = (GE > LAT) ? GE : LAT;     // shortest allowed block
+    localparam GB  = (GE > HZ) ? GE : HZ;       // shortest allowed block
 
     reg init = 1'b1;
     always @(posedge clk) init <= 1'b0;
@@ -68,13 +69,13 @@ module fv_systolic_v5 #(parameter N = 4, parameter G = 2) (
     reg          due;
     reg [IW-1:0] due_row;
     reg [IW:0]   n_due, win, nreq;
-    // ticks since each cell's last request (capped at LAT)
+    // ticks since each cell's last request (capped at HZ)
     reg [3:0] since [0:N*N-1];
     integer z;
-    initial for (z = 0; z < N*N; z = z + 1) since[z] = LAT;
+    initial for (z = 0; z < N*N; z = z + 1) since[z] = HZ;
     always @(posedge clk)
         for (z = 0; z < N*N; z = z + 1)
-            since[z] <= f_req[z] ? 4'd1 : (since[z] < LAT ? since[z] + 1 : since[z]);
+            since[z] <= f_req[z] ? 4'd1 : (since[z] < HZ ? since[z] + 1 : since[z]);
     integer r, p, q, i, j0, j;
     always @(*) begin
         due = 1'b0; due_row = 0; n_due = 0;
@@ -97,8 +98,8 @@ module fv_systolic_v5 #(parameter N = 4, parameter G = 2) (
                 assert(nreq <= 1);
             end
         for (z = 0; z < N*N; z = z + 1)
-            if (f_req[z]) assert(since[z] >= LAT);
-            else assert(since[z] <= LAT && since[z] >= 1);
+            if (f_req[z]) assert(since[z] >= HZ);
+            else assert(since[z] <= HZ && since[z] >= 1);
         // helper rules (invariants) for the induction proof
         assert(f_last_dly == ended[N+LAT-1:0]);
         assert(f_draining == (|ended[2*N+LAT-2:N+LAT]));

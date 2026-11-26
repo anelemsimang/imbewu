@@ -25,7 +25,7 @@ elif [ "$V" = v5 ]; then
   SRC="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v ${SYS:-rtl/systolic_v5.v}"
   PARAMS="chparam -set N $N -set G $G"
   K=${K5:-$((2 * N + G + 7))}   # deeper induction: the shared-adder rule spans a block
-  BASE=$((2 * N + 9))
+  BASE=$((2 * N + 10))
 elif [ "$V" = v4 ]; then
   TOP=fv_systolic_v4
   SRC="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v4.v ${SYS:-rtl/systolic_v4.v}"
@@ -42,7 +42,7 @@ yosys -q -p "read_verilog -formal $SRC formal/$TOP.v; \
 status() { tail -1 | sed 's/.*Status: //'; }
 B=$(yosys-smtbmc -s yices -t $BASE $M | status)
 I=$(yosys-smtbmc -s yices -i -t $K $M | status)
-CD=$((4 * N + 8)); [ "$V" = mm ] && CD=$((4 * N + 40))
+CD=$((4 * N + 8)); [ "$V" = v5 ] && CD=$((4 * N + 10)); [ "$V" = mm ] && CD=$((4 * N + 40))
 C=$(yosys-smtbmc -s yices -c -t $CD $M | status)
 [ "$V" = v5 ] && V="v5 (G=$G)"
 [ "$V" = mm ] && V="tiling controller (G=$G)"

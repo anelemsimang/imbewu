@@ -4,21 +4,20 @@
 set P      $::env(PLATFORM)
 set OUT    $::env(OUT)
 set PERIOD $::env(PERIOD)
+source tools/w2_pdk.tcl
 source tools/w2_reports.tcl
 source tools/w2_extract.tcl
 set_thread_count [exec nproc]
 
-read_lef $P/lef/sky130_fd_sc_hd.tlef
-read_lef $P/lef/sky130_fd_sc_hd_merged.lef
-read_liberty $P/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+w2_read_tech $P $W2_TYP
 read_db $OUT/groute.odb
 read_sdc $OUT/groute.sdc
 source $P/setRC.tcl
 set_propagated_clock [all_clocks]
 
-set_routing_layers -signal met1-met5 -clock met3-met5
+set_routing_layers -signal $W2_SIG_LAYERS -clock $W2_CLK_LAYERS
 detailed_route -output_drc $OUT/route_drc.rpt -droute_end_iter 30 -verbose 1
-filler_placement {sky130_fd_sc_hd__fill_1 sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_4 sky130_fd_sc_hd__fill_8}
+filler_placement $W2_FILL
 write_db $OUT/final.odb
 
 # Real wires: resistance and capacitance extracted from the routed layout

@@ -4,13 +4,14 @@
 //  * Each row's cells are split into groups of G (default 16). Each group
 //    shares ONE FP32 adder. This works because cells in a row reach the end
 //    of a block one tick apart, so their requests arrive one after another.
-//  * Short steps for a fast clock: each cell does its multiply in its own
-//    tick (see pe_v5.v); the shared adder is a hand-off register and six
+//  * Short steps for a fast clock: each cell does its multiply in two ticks
+//    of its own (see pe_v5.v; two since D-027, when the SKY130 layout showed
+//    the one-tick multiply was the slowest path); the shared adder is a hand-off register and six
 //    one-tick steps (S1a, S1b, S2, S3, S4a, S4b in fp32_add_fx.v). S4 was
 //    one tick until the second SKY130 layout showed it was the slowest
 //    path (docs/RESULTS.md 2026-11-26).
-// Output rows leave 7 ticks later than in version 4: row r appears
-// N + 8 + r ticks after the job's last beat.
+// Output rows leave 8 ticks later than in version 4: row r appears
+// N + 9 + r ticks after the job's last beat.
 //
 // Rules:
 //  * every job has at least N beats (as before);
@@ -41,7 +42,7 @@ module systolic_v5 #(
     output reg  [IW-1:0]     out_row_idx,
     output reg  [N*32-1:0]   out_row
 `ifdef FORMAL
-    , output wire [N+6:0]    f_last_dly,     // N + LAT bits
+    , output wire [N+7:0]    f_last_dly,     // N + LAT bits
     output wire              f_draining,
     output wire [IW-1:0]     f_rd_row,
     output wire [N*N-1:0]    f_req
@@ -51,7 +52,7 @@ module systolic_v5 #(
     localparam GE  = (N < G) ? N : G;           // cells per adder
     localparam NG  = (N + GE - 1) / GE;         // adders per row
     localparam GW  = $clog2(GE) + 1;
-    localparam LAT = 7;                         // extra ticks vs version 4
+    localparam LAT = 8;                         // extra ticks vs version 4
     localparam AW  = 8 + 2 + 8 + 3 + 1;     // a, fa, sa, {v, bl, jl}, ph
     localparam BW  = 8 + 2 + 8;
 

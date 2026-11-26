@@ -264,3 +264,24 @@ The owner's 0-10 scale (how progress is reported to the owner):
   logs it in docs/RESULTS.md. Other scores the owner has seen (basic ideas
   6-7, checked to be correct 7-8, ready to manufacture 2, software 2-3)
   are judgements, not formulas; update them only with a reason.
+
+### D-027 - Two-tick multiply in the engine cell; one layout flow for SKY130 and ASAP7
+The third SKY130 layout showed the cell's one-tick multiply (decode, 9 x 9
+multiply, shift into place, sum of the two FP4 products) was the slowest
+path at every corner. The multiply now takes two ticks: `mx_mul_s1` decodes
+and multiplies the significands, a register holds the two 18-bit products
+and their 5-bit shifts, and `mx_mul_s2` shifts and adds. `mx_mul` is the two
+halves joined, so the exhaustive multiplier test (every input) checks the
+split. Cost: about 60 more flip-flops per cell, and output rows leave one
+tick later (N + 9 + r ticks after a job's last beat). The adder rules are
+unchanged (an MX block still needs max(min(G, N), 7) beats), because the
+extra tick delays a cell's requests and answers alike. Cutting after the
+multiply was chosen over cutting after the decode: it splits the path into
+two halves of similar depth with fewer flip-flops.
+
+The layout scripts now take the process as a setting (`PDK=sky130hd` or
+`PDK=asap7`, `tools/w2_pdk.tcl`). ASAP7 files come from OpenROAD-flow-
+scripts at a pinned commit, checked against `tools/w2_asap7.sha256`. ASAP7
+is timed at its typical corner (TT: 25 C, 0.70 V), slow (SS: 100 C, 0.63 V)
+and fast (FF: 0 C, 0.77 V). Many published ASAP7 results quote the fast
+corner (the flow's default); ours quote typical and slow, as for SKY130.

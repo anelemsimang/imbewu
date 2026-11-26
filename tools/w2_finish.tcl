@@ -4,13 +4,12 @@
 set P      $::env(PLATFORM)
 set OUT    $::env(OUT)
 set PERIOD $::env(PERIOD)
+source tools/w2_pdk.tcl
 source tools/w2_reports.tcl
 source tools/w2_extract.tcl
 set_thread_count [exec nproc]
 
-read_lef $P/lef/sky130_fd_sc_hd.tlef
-read_lef $P/lef/sky130_fd_sc_hd_merged.lef
-read_liberty $P/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+w2_read_tech $P $W2_TYP
 read_db $OUT/final.odb
 read_sdc $OUT/groute.sdc
 source $P/setRC.tcl
