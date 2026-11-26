@@ -1,3 +1,4 @@
 ml_dtypes>=0.5
 numpy
 yices-solver
+torch

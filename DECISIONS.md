@@ -227,3 +227,24 @@ separate from the process so it can be redone later on a real 4 nm kit.
 Whole-chip results come from exact checks of one engine and tile (gate
 level, formal proofs) plus a performance model, not from a gate-level
 simulation of every engine.
+
+How the limits are handled (owner's discussion, 2026-11-26):
+- Simulation: the 500 engines are identical, so one engine (and one tile)
+  is proven equal to its design at gate level; the whole chip is simulated
+  at design level (Verilator, several threads); throughput, memory traffic
+  and energy for a real model (Qwen2.5-0.5B) come from a performance
+  model; timing is computed per tile (static timing), not simulated.
+- Computing power: this session's machine has 4 cores and a fixed size.
+  For larger layouts, a rented cloud machine (64-192 cores); for running
+  the real design fast, cloud FPGAs (a few engines each); hardware
+  emulators (as NVIDIA uses) only much later.
+- ASAP7 gaps: no memory generator (on-chip memories are stand-in blocks
+  with estimated size and speed), no interface circuits (the HBM
+  interface is modelled, not laid out), and its numbers are predictions
+  that could be off by a noticeable margin. ASAP7 is 7 nm; 4 nm figures
+  come from scaling with published data.
+- Expectation: if all of it works, about 60-80% of an H100's peak 8-bit
+  rate on paper; a fair overall judgement lower (real use rarely reaches
+  peak, estimates are not silicon, and the network, power delivery and
+  verification of a chip that size are the main risks). Manufacturing, a
+  licensed HBM interface and a software stack are outside this target.
