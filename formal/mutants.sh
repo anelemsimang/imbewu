@@ -96,7 +96,7 @@ P5=rtl/pe_v5.v; S5=rtl/systolic_v5.v
 mutate $S5 "shared adder answers the wrong cell"            's/(q5_who == j - J0)/(q5_who == J1 - 1 - j)/' v5
 mutate $P5 "block total not cleared at block end"            's/if (v_r) partial <= be_r ? 48'"'"'sd0 : x;/if (v_r) partial <= x;/' v5
 mutate $P5 "FP32 total not cleared between jobs"             's/                    acc <= 32'"'"'d0;/                    acc <= wb_sum;/' v5
-mutate $S5 "rows read out one tick too early"                's/localparam LAT = 6;/localparam LAT = 5;/' formal5
+mutate $S5 "rows read out one tick too early"                's/localparam LAT = 7;/localparam LAT = 6;/' formal5
 mutate $F "adder: larger and smaller swapped when subtracting" 's/end else if (al_a >= al_x) begin/end else if (al_a < al_x) begin/' fadd
 mutate $S5 "adder requests not picked from the whole group"  's/for (c = J0; c < J1; c = c + 1)/for (c = J0; c < J1 - 1; c = c + 1)/' v5
 echo "tiling controller:"
