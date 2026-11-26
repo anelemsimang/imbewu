@@ -1611,3 +1611,41 @@ pass); its placement is being rerun.
   130 nm), not by the multiply change. Not yet a finished-layout figure.
 The score's big steps come later: 32x32 engines (64x the cells per
 engine) and about 500 engines (500x).
+
+## 2026-11-26 - First finished ASAP7 layout of the 4x4 engine (W2)
+
+**What was done.** `matmul_unit` (N = 4) with the two-tick multiply and the
+AND-OR adder select, through the whole flow on ASAP7 (`PDK=asap7`, 0.75 ns
+asked): placement, clock tree, wiring (1 h 12 min), extraction of the real
+wires, timing at three corners. Outputs in `build/layout/mm4_asap7_p075b`.
+
+| | Typical (TT, 25 C, 0.70 V) | Slow (SS, 100 C, 0.63 V) | Fast (FF, 0 C, 0.77 V) |
+|---|---|---|---|
+| Slowest path inside the engine | 1.013 ns | 1.473 ns | 0.760 ns |
+| **Clock it can run at (inside)** | **about 987 MHz** | **about 679 MHz** | about 1,316 MHz |
+| Including the memory-address outputs | 928 MHz | 672 MHz | 1,129 MHz |
+| Hold, register to register | +0.011 ns | +0.028 ns | -0.0003 ns |
+| Power at 1.33 GHz, 10% / 20% / 50% switching | 41 / 53 / 73 mW | 42 mW (20%) | 70 mW (20%) |
+
+Area: 10,655 µm² of gates (0.0107 mm²) on a 0.023 mm² die, about 60x
+smaller than on SKY130. Power splits 32% flip-flops, 52% logic, 16% clock
+tree. Wiring left 102 rule violations (64 shorts) out of about 86,000
+connections; all wires were extracted (none skipped).
+
+**In plain words.** On a 7 nm process the same engine runs about 9 times
+faster (987 MHz against 109 MHz) in about 1/60 of the area. The fast-corner
+hold figure is a fraction of a picosecond short: a hold buffer or two fixes
+it. The slow-corner clock (679 MHz) is the one every chip could be
+promised; ASAP7's numbers are predictions, not a factory's.
+
+**What limited the speed.** The shared adder's input: picking the
+requesting cell, then adding its block total and product (a 48-bit add that
+synthesis built as a ripple chain, after five buffers spreading the request
+flag). Fixed since: each cell now sends its finished sum, which it already
+computes, so the add runs while the flag spreads (`make test-v5` bit
+exact). The placement of that version puts the multiplier's first half
+(decode + 9 x 9 multiply, about 0.93 ns) on top next.
+
+**Progress score (D-026 scale).** 16 cells x 987 MHz = 15.8 billion 8-bit
+multiplications per second: **0.00016** (SKY130: 0.000017). Moved by the
+7 nm process and the adder-select fix.
