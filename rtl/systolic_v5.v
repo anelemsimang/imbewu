@@ -64,10 +64,8 @@ module systolic_v5 #(
 
     // request / answer wires of every cell
     wire        rq_v   [0:N-1][0:N-1];
-    wire [7:0]  rq_sel [0:N-1][0:N-1];   // copies of rq_v for the select
     wire        rq_jl  [0:N-1][0:N-1];
-    wire [47:0] rq_pt  [0:N-1][0:N-1];   // block total so far
-    wire [47:0] rq_p   [0:N-1][0:N-1];   // last product
+    wire [47:0] rq_x   [0:N-1][0:N-1];   // block total so far + last product
     wire [10:0] rq_e   [0:N-1][0:N-1];
     wire [31:0] rq_acc [0:N-1][0:N-1];
     wire        wb_v   [0:N-1][0:N-1];
@@ -108,7 +106,7 @@ module systolic_v5 #(
                 wire [7:0] ao, bo, sao, sbo;
                 wire [1:0] fao, fbo;
                 wire vo, blo, jlo, pho;
-                wire signed [47:0] qpt, qp;
+                wire signed [47:0] qx;
                 wire signed [10:0] qe;
                 pe_v5 u_pe (
                     .clk(clk), .rst(rst),
@@ -118,12 +116,11 @@ module systolic_v5 #(
                     .a_out(ao), .fa_out(fao), .sa_out(sao), .v_out(vo), .bl_out(blo), .jl_out(jlo),
                     .ph_out(pho),
                     .b_out(bo), .fb_out(fbo), .sb_out(sbo),
-                    .req_v(rq_v[i][j]), .req_sel(rq_sel[i][j]), .req_jl(rq_jl[i][j]), .req_part(qpt), .req_p(qp), .req_e(qe),
+                    .req_v(rq_v[i][j]), .req_jl(rq_jl[i][j]), .req_x(qx), .req_e(qe),
                     .req_acc(rq_acc[i][j]),
                     .wb_v(wb_v[i][j]), .wb_jl(wb_jl[i][j / GE]), .wb_sum(wb_sum[i][j / GE]),
                     .res(res));
-                assign rq_pt[i][j] = qpt;
-                assign rq_p[i][j]  = qp;
+                assign rq_x[i][j] = qx;
                 assign rq_e[i][j] = qe;
                 assign a_bus[i][j+1] = {pho, ao, fao, sao, vo, blo, jlo};
                 assign b_bus[i+1][j] = {bo, fbo, sbo};
@@ -140,25 +137,22 @@ module systolic_v5 #(
                 // pick the requesting cell. At most one asks per tick (the
                 // rules; proven in formal/fv_systolic_v5.v), so the pick is a
                 // plain AND-OR: each cell's words are gated by its own
-                // request, then OR-ed. Each copy of a cell's request flag
-                // (rq_sel) gates one slice of the words (D-027).
+                // request, then OR-ed (D-027).
                 reg        s_v, s_jl;
-                reg [47:0] s_pt, s_p;
-                wire [47:0] s_x = s_pt + s_p;   // pick first, then add: a short hand-off
+                reg [47:0] s_x;
                 reg [10:0] s_e;
                 reg [31:0] s_acc;
                 reg [GW-1:0] s_who;
                 integer c;
                 always @(*) begin
-                    s_v = 1'b0; s_jl = 1'b0; s_pt = 48'd0; s_p = 48'd0; s_e = 11'd0; s_acc = 32'd0; s_who = 0;
+                    s_v = 1'b0; s_jl = 1'b0; s_x = 48'd0; s_e = 11'd0; s_acc = 32'd0; s_who = 0;
                     for (c = J0; c < J1; c = c + 1) begin
                         s_v   = s_v   | rq_v[i][c];
-                        s_pt  = s_pt  | ({{24{rq_sel[i][c][1]}}, {24{rq_sel[i][c][0]}}} & rq_pt[i][c]);
-                        s_p   = s_p   | ({{24{rq_sel[i][c][3]}}, {24{rq_sel[i][c][2]}}} & rq_p[i][c]);
-                        s_acc = s_acc | ({{16{rq_sel[i][c][5]}}, {16{rq_sel[i][c][4]}}} & rq_acc[i][c]);
-                        s_e   = s_e   | ({11{rq_sel[i][c][6]}} & rq_e[i][c]);
-                        s_jl  = s_jl  | (rq_sel[i][c][7] & rq_jl[i][c]);
-                        s_who = s_who | ({GW{rq_sel[i][c][7]}} & (c - J0));
+                        s_x   = s_x   | ({48{rq_v[i][c]}} & rq_x[i][c]);
+                        s_acc = s_acc | ({32{rq_v[i][c]}} & rq_acc[i][c]);
+                        s_e   = s_e   | ({11{rq_v[i][c]}} & rq_e[i][c]);
+                        s_jl  = s_jl  | (rq_v[i][c] & rq_jl[i][c]);
+                        s_who = s_who | ({GW{rq_v[i][c]}} & (c - J0));
                     end
                 end
                 // The shared adder: a hand-off register, then steps S1a, S1b,
