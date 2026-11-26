@@ -23,7 +23,10 @@
 //
 // Address of a word: {row, column high bits, bank, column low 2 bits}:
 // 4 consecutive words share a bank, the next 4 go to the next bank, so a
-// stream keeps all 16 banks' rows open and opens them ahead of use. Timing parameters are in ticks of the
+// stream keeps all 16 banks' rows open and opens them ahead of use. With
+// HASH the bank is XOR-ed with the low 4 row bits ("permutation-based
+// interleaving"), so several streams at once use different banks instead
+// of fighting over the same ones. Timing parameters are in ticks of the
 // chip clock (HBM3 values at about 1.2 GHz; the defaults are estimates,
 // tests/tb_hbm.v checks every rule in a DRAM model).
 module hbm_ctrl #(
@@ -34,6 +37,7 @@ module hbm_ctrl #(
     parameter RB   = 14,          // row bits
     parameter Q    = 16,          // request queue entries
     parameter RQ   = 16,          // answer queue entries
+    parameter HASH = 1,           // 1: bank = address bank bits XOR low row bits
     // timing, in ticks
     parameter T_RCD = 17,         // activate -> read/write
     parameter T_RP  = 17,         // precharge -> activate
@@ -240,6 +244,9 @@ module hbm_ctrl #(
                 e_v[free_e] <= 1'b1; e_we[free_e] <= rq_we; e_tag[free_e] <= rq_tag;
                 e_wd[free_e] <= rq_wdata; e_age[free_e] <= age_ctr;
                 {e_row[free_e], e_col[free_e][CB-1:2], e_bk[free_e], e_col[free_e][1:0]} <= rq_addr;
+                // bank hashing: the bank number is XOR-ed with the low row bits,
+                // so streams in different rows fall into different banks
+                if (HASH) e_bk[free_e] <= rq_addr[2 +: BB] ^ rq_addr[CB + BB +: BB];
                 age_ctr <= age_ctr + 1'b1;
             end
 

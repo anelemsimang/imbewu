@@ -6,7 +6,7 @@ TRIALS := 1000
 
 .PHONY: gate lint test test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq mutants-mxq test-tile-v4 mutants-tile-v4 test-cluster mutants-cluster formal mutants perf synth clean
 
-test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster test-noc test-hbm
+test: test-mac test-systolic test-stream test-mx test-cell test-mul test-fp32 test-v4 test-v5 test-tile test-tile-v1 test-tile-v2 test-tile-v3 test-soc test-compile test-fp32ops test-vu test-mxq test-tile-v4 test-cluster test-noc test-hbm test-fabric
 
 test-mac:
 	@mkdir -p $(BUILD)
@@ -165,6 +165,10 @@ test-noc:
 # HBM memory controller against a timing-checking DRAM model
 test-hbm:
 	tests/run_hbm_tests.sh
+
+# Memory system end to end: tiles, two meshes, HBM controllers, on-chip memory
+test-fabric:
+	tests/run_fabric_tests.sh
 
 # Gate-level simulation: tests rerun on the gates Yosys builds (slow)
 gate:

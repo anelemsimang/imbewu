@@ -66,6 +66,10 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         rm -rf $OUT/noc; OUT=$OUT/noc NOC=$m tests/run_noc_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = hbm ]; then
         rm -rf $OUT/hbm; OUT=$OUT/hbm HBM=$m tests/run_hbm_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = fabmc ]; then
+        rm -rf $OUT/fab; OUT=$OUT/fab MC=$m tests/run_fabric_tests.sh > /dev/null 2>&1 && r=missed || r=caught
+    elif [ $kind = fabsr ]; then
+        rm -rf $OUT/fab; OUT=$OUT/fab SR=$m tests/run_fabric_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formalnoc ]; then
         SYS=$m formal/run.sh 2 noc > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = formal5 ]; then
@@ -155,5 +159,8 @@ mutate $HC "read issued one tick too soon after opening a row" 's/b_t_col\[bk\] 
 mutate $HC "a newer read overtakes an older write to the same word" 's/col_ok\[k\] = hit\[k\] \&\& !blocked\[k\]/col_ok[k] = hit[k]/' hbm
 mutate $HC "refresh never done"                              's/if (t_refi != 0) t_refi <= t_refi - 1'"'"'b1; else ref_due <= 1'"'"'b1;/if (t_refi != 0) t_refi <= t_refi - 1'"'"'b1;/' hbm
 mutate $HC "five row openings allowed in one tFAW window"     's/(n_faw < 4)/(n_faw < 5)/' hbm
+echo "memory system (D-030):"
+mutate rtl/sram_node.v "memory block answers without room in the network" 's/wire go = (fq_n != 0) \&\& (oc > infl);/wire go = (fq_n != 0);/' fabsr
+mutate rtl/mc_node.v "answers sent to the wrong tile (tag bits)"          's/assign out_flit = {rs_tag\[HT-1 -: XW + YW\]/assign out_flit = {rs_tag[HT-2 -: XW + YW]/' fabmc
 echo "mutants: $caught of $total planted bugs caught"
 [ $caught = $total ]

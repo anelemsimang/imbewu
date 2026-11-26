@@ -327,3 +327,34 @@ random reads (the four-activates-per-window rule caps random reads at
 40%), 35% on mixed random reads and writes. The HBM interface circuit
 (PHY) and the DRAM itself are licensed parts and are modelled, not built.
 A chip like the target has about 160 pseudo-channels (5 stacks x 32).
+
+### D-030 - On-chip memory blocks, and the memory system wired together
+Shared on-chip memory (like a GPU's "L2") is a set of blocks spread over
+the mesh, each a network node (`rtl/sram_node.v`: one access per tick,
+answer L ticks later, stand-in array). HBM controllers are nodes too
+(`rtl/mc_node.v`: a small queue, then `hbm_ctrl.v`). Requests and answers
+travel on two separate meshes. Each answer is addressed to its tile by
+the request's source coordinates and tag, so answers may come back in any
+order. Bank hashing is on in `hbm_ctrl.v` (bank XOR low row bits): with
+many tiles streaming at once it doubled the share of HBM bandwidth used
+(27% -> 58-61% in `make test-fabric`).
+
+Size and speed estimates for on-chip memory (ASAP7 has no memory
+generator): ASAP7's stand-in block in OpenROAD-flow-scripts
+(`fakeram7_256x32`: 1 KB, 344 µm², data 0.22 ns after the clock) gives
+about 24 Mbit per mm², the same as published 7 nm high-density SRAM
+(bit cell 0.027 µm², about 0.042 µm² per bit with the block's own
+circuits). Published 5 nm cells are 0.021 µm² (about 31 Mbit/mm² as
+blocks). So 50 MB of shared memory (an H100's L2) is about 13 mm² of
+blocks at 4-5 nm, plus wiring; 256 KB per tile x 500 tiles (128 MB) about
+33 mm². Large blocks are slower than the 1 KB stand-in: L = 2 ticks is
+optimistic for big blocks, and the performance model uses more.
+
+Sizing finding for the full chip: 5 HBM3 stacks have 160 pseudo-channels
+of about 25.6 GB/s each, i.e. 0.67 words of 32 bytes per tick at
+1.2 GHz. A router port carries 1 word per tick, and a 24 x 21 mesh has
+only 42 nodes on its left and right edges, so (a) controllers go on all
+four edges (90 nodes) and (b) words become 64 bytes, or edge routers get
+two local ports. The middle of the mesh (21 links each way) is also
+close to full when every tile streams weights from HBM at once: the
+performance model (step 5) checks this before the design is fixed.

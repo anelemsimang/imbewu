@@ -73,9 +73,12 @@ design effort (see DECISIONS.md, D-013).
       scaling measured (docs/RESULTS.md, 2026-11-24)
 - [x] Broadcast of shared activations to several tiles: tiles join reads
       already in flight (D-022): 1.8x faster on one channel, reads halved
-- [ ] On-chip network connecting tiles
+- [x] On-chip network connecting tiles: mesh of credit-based routers, XY
+      routing, proven per router; requests and answers on two meshes (D-028)
 - [ ] 16-tile simulation
-- [ ] HBM memory controller and bandwidth model
+- [x] HBM memory controller (one per pseudo-channel, FR-FCFS, bank hashing)
+      checked against a timing-checking DRAM model (D-029); on-chip memory
+      blocks as network nodes; the memory system end to end, 0 errors (D-030)
 - [ ] Chip-to-chip link design based on open standards (UALink / Ultra Ethernet)
 - [ ] Collective operations in hardware (the data exchanges chips do during
       training, such as all-reduce), so chips don't sit idle
@@ -113,10 +116,14 @@ deliberately planted bugs, real model data.
 ### Target (D-026, 2026-11-26)
 An H100-class chip design on paper: about 500 engines of 32x32, about
 1.2-1.6 GHz on ASAP7 (7 nm, predictive), on-chip memory and network, an
-HBM-speed memory model (about 3 TB/s, 80 GB), about 700 W. Steps: pipeline
-the multiplier; the layout flow on ASAP7; one 32x32 engine laid out as a
-tile; on-chip memory, memory controller and network; a whole-chip
-performance model running Qwen2.5-0.5B.
+HBM-speed memory model (about 3 TB/s, 80 GB), about 700 W. Steps:
+- [x] pipeline the multiplier (two ticks, then a carry-save tree; D-027)
+- [x] the layout flow on ASAP7 (4x4: 987 MHz inside the engine, typical)
+- [ ] one 32x32 engine laid out as a tile
+- [x] on-chip memory, memory controller and network (D-028 to D-030)
+- [ ] a whole-chip performance model running Qwen2.5-0.5B
+- [ ] later: the "1.4 GHz pass" (third multiply tick; split the block-total
+      add and adder steps S1a and S3)
 
 ### W2 - Real physical numbers (limitation 4: no secret factory rules)
 - [x] First step: engine mapped onto real cell libraries (SKY130, open 45 nm)

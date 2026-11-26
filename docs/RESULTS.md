@@ -1649,3 +1649,40 @@ exact). The placement of that version puts the multiplier's first half
 **Progress score (D-026 scale).** 16 cells x 987 MHz = 15.8 billion 8-bit
 multiplications per second: **0.00016** (SKY130: 0.000017). Moved by the
 7 nm process and the adder-select fix.
+
+## 2026-11-26 - Step 4: network, HBM controller and on-chip memory, end to end
+
+**What was built.** The on-chip network (D-028: `noc_router.v`,
+`noc_mesh.v`), an HBM pseudo-channel controller (D-029: `hbm_ctrl.v`,
+checked against `tests/hbm_dram_model.v`, which tests every DRAM timing
+rule) and shared on-chip memory blocks (D-030: `sram_node.v`), wired into
+one memory system (`tests/tb_fabric.v`): a 6 x 4 grid, HBM controllers on
+the left and right edges (8 channels), 5 memory blocks and 11 tiles inside,
+one mesh for requests and one for answers.
+
+| Check | Result |
+|---|---|
+| Router, formal (any traffic, queue depths 2 and 4) | no overflow, credits conserved, right turns, nothing lost, fair |
+| Network, random traffic (4x4, 8x8, 3x5; 3 patterns) | every flit once, in order; about 6 ticks per trip at light load |
+| HBM controller vs DRAM model (4 patterns) | 0 timing-rule breaks, 0 data errors |
+| Whole memory system (5 patterns, 3,300-16,500 requests) | 0 errors |
+| Planted bugs (router 4, controller 4, memory system 2) | all caught |
+
+**Measured** (ticks of a ~1.2 GHz clock; 100% = the channel's peak):
+
+| Traffic | Share of HBM bandwidth used | Answer time |
+|---|---|---|
+| One stream on one channel | 91% | 45-53 ticks |
+| Random reads on one channel | 33% (DRAM rules cap it at 40%) | 115 ticks |
+| 11 tiles streaming at once, 8 channels | 61% (27% before bank hashing) | 132 ticks |
+| 11 tiles, random reads | 32% | 200 ticks |
+| 11 tiles, on-chip memory blocks | 59% of the blocks' peak | 47 ticks |
+
+**In plain words.** Every part of the memory path works and is checked.
+HBM delivers close to its peak when one stream reads it in order, about
+60% when many tiles share it, and about a third for scattered reads, which
+is typical for DRAM. The on-chip memory answers about three times sooner
+than HBM. These shares go into the whole-chip performance model (step 5).
+The sizing for the full chip (D-030): memory controllers on all four edges
+and 64-byte words, and the middle of the network needs checking under full
+load.
