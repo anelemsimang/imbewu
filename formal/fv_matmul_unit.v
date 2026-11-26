@@ -1,12 +1,12 @@
 // fv_matmul_unit.v - formal proof that the tiling controller always obeys
 // the engine's rules, for every allowed configuration, for all time:
 //   C1  every job it sends has at least N beats
-//   C2  every MX block it sends has at least max(min(G, N), 6) beats
+//   C2  every MX block it sends has at least max(min(G, N), 7) beats
 //   C3  every job ends with a block end, and there are no gaps inside a job
 //   C4  after a start it sends exactly MT x NT jobs, then stops
 // Configurations are free (the solver tries all of them, up to 7 x 7 tiles,
 // 7 blocks of up to 31 beats) within the rules:
-// cfg_beats = cfg_nb x cfg_bb, cfg_bb >= max(min(G, N), 6), cfg_beats >= N.
+// cfg_beats = cfg_nb x cfg_bb, cfg_bb >= max(min(G, N), 7), cfg_beats >= N.
 module fv_matmul_unit #(parameter N = 4, parameter G = 2) (
     input wire clk,
     input wire start,
@@ -16,7 +16,7 @@ module fv_matmul_unit #(parameter N = 4, parameter G = 2) (
     input wire [N*8-1:0] a_data, b_data, sa_data, sb_data
 );
     localparam GE = (N < G) ? N : G;
-    localparam GB = (GE > 6) ? GE : 6;   // shortest block the engine allows
+    localparam GB = (GE > 7) ? GE : 7;   // shortest block the engine allows
     reg init = 1'b1;
     always @(posedge clk) init <= 1'b0;
     wire rst = init;

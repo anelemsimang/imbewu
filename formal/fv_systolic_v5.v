@@ -1,15 +1,15 @@
 // fv_systolic_v5.v - formal checks of the version 5 engine.
 //
 //   R1  Every job produces exactly N output rows, rows 0..N-1 in order, row r
-//       appearing exactly N+7+r ticks after the job's last input beat.
+//       appearing exactly N+8+r ticks after the job's last input beat.
 //   R2  No output row ever appears that does not belong to a job.
 //   R4  Shared adders are never double-booked: in each group of cells that
 //       shares an FP32 adder, at most one cell asks for it in any tick, and
 //       no cell asks again before its previous answer has come back
-//       (6 ticks).
+//       (7 ticks).
 //
 // Assumptions (the documented rules): every job has at least N beats and
-// every MX block has at least max(min(G, N), 6) beats.
+// every MX block has at least max(min(G, N), 7) beats.
 module fv_systolic_v5 #(parameter N = 4, parameter G = 2) (
     input wire           clk,
     input wire           in_valid,
@@ -23,7 +23,7 @@ module fv_systolic_v5 #(parameter N = 4, parameter G = 2) (
     input wire [N*8-1:0] in_b_scale
 );
     localparam IW  = $clog2(N) + 1;
-    localparam LAT = 6;
+    localparam LAT = 7;
     localparam D   = 2 * N + LAT + 1;
     localparam GE  = (N < G) ? N : G;
     localparam GB  = (GE > LAT) ? GE : LAT;     // shortest allowed block

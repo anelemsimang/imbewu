@@ -8,7 +8,7 @@ OUT=build/mutants; mkdir -p $OUT
 [ -f build/mul_exh.hex ]  || python3 tools/gen_mul_exhaustive.py build/mul_exh.hex
 [ -f build/fp32_stim.hex ] || python3 tools/fp32_ref.py build/fp32 200000
 mkdir -p build/v4; [ -f build/v4/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v4
-mkdir -p build/v5m; [ -f build/v5m/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v5m 60 6
+mkdir -p build/v5m; [ -f build/v5m/v4_N4_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 4 build/v5m 60 7
 V5="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v5.v rtl/systolic_v5.v"
 v5sim() {   # 4x4 version 5 tests (adders shared by 4 cells) with one file replaced
     local files=$(echo $V5 | sed "s#$1#$2#")

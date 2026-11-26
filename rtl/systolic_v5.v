@@ -5,15 +5,18 @@
 //    shares ONE FP32 adder. This works because cells in a row reach the end
 //    of a block one tick apart, so their requests arrive one after another.
 //  * Short steps for a fast clock: each cell does its multiply in its own
-//    tick (see pe_v5.v); the shared adder is a hand-off register and five
-//    one-tick steps (S1a, S1b, S2, S3, S4 in fp32_add_fx.v).
-// Output rows leave 6 ticks later than in version 4: row r appears
-// N + 7 + r ticks after the job's last beat.
+//    tick (see pe_v5.v); the shared adder is a hand-off register, five
+//    one-tick steps (S1a, S1b, S2, S3, S4 in fp32_add_fx.v) and a hand-back
+//    register, so S4's rounding and the delivery of the new total to the
+//    cells get a tick each (the slowest path of the first SKY130 layout
+//    when they shared one, docs/RESULTS.md 2026-11-26).
+// Output rows leave 7 ticks later than in version 4: row r appears
+// N + 8 + r ticks after the job's last beat.
 //
 // Rules:
 //  * every job has at least N beats (as before);
-//  * every MX block has at least max(min(G, N), 6) beats (new): a shared
-//    adder serves its cells one per tick, and a cell's new total takes 6
+//  * every MX block has at least max(min(G, N), 7) beats (new): a shared
+//    adder serves its cells one per tick, and a cell's new total takes 7
 //    ticks to come back. A standard MX block of 32 numbers is 32 beats, or 16
 //    beats when both sides are FP4, so standard blocks always qualify. A short final block (K not a
 //    multiple of 32) can be padded with zeros, which changes nothing.
@@ -39,7 +42,7 @@ module systolic_v5 #(
     output reg  [IW-1:0]     out_row_idx,
     output reg  [N*32-1:0]   out_row
 `ifdef FORMAL
-    , output wire [N+5:0]    f_last_dly,     // N + LAT bits
+    , output wire [N+6:0]    f_last_dly,     // N + LAT bits
     output wire              f_draining,
     output wire [IW-1:0]     f_rd_row,
     output wire [N*N-1:0]    f_req
@@ -49,7 +52,7 @@ module systolic_v5 #(
     localparam GE  = (N < G) ? N : G;           // cells per adder
     localparam NG  = (N + GE - 1) / GE;         // adders per row
     localparam GW  = $clog2(GE) + 1;
-    localparam LAT = 6;                         // extra ticks vs version 4
+    localparam LAT = 7;                         // extra ticks vs version 4
     localparam AW  = 8 + 2 + 8 + 3 + 1;     // a, fa, sa, {v, bl, jl}, ph
     localparam BW  = 8 + 2 + 8;
 
@@ -150,8 +153,9 @@ module systolic_v5 #(
                         end
                 end
                 // The shared adder: a hand-off register, then steps S1a, S1b,
-                // S2, S3 and S4 (rtl/fp32_add_fx.v), one tick each. The new
-                // total reaches the cell 5 ticks after the hand-off.
+                // S2, S3 and S4 (rtl/fp32_add_fx.v), one tick each, then a
+                // hand-back register. The new total reaches the cell 6 ticks
+                // after the hand-off.
                 reg               q0_v, q0_jl;
                 reg        [47:0] q0_x;
                 reg        [10:0] q0_e;
@@ -215,11 +219,21 @@ module systolic_v5 #(
                     p_jl <= q3_jl; q4_inf <= q3_inf; q4_is <= q3_is; q4_sr <= q3_sr;
                     q4_R <= q3_R; q4_L <= d_L; q4_lsb <= d_lsb; q4_s <= d_s; p_who <= q3_who;
                 end
+                wire [31:0] e_sum;
                 fp32_s4_round u4 (.inf(q4_inf), .inf_sign(q4_is), .s_r(q4_sr), .R(q4_R), .L(q4_L),
-                                  .lsb_in(q4_lsb), .s(q4_s), .sum(wb_sum[i][g]));
-                assign wb_jl[i][g] = p_jl;
+                                  .lsb_in(q4_lsb), .s(q4_s), .sum(e_sum));
+                // hand-back register: the new total goes to its cell next tick
+                reg               q5_v, q5_jl;
+                reg        [31:0] q5_sum;
+                reg     [GW-1:0]  q5_who;
+                always @(posedge clk) begin
+                    q5_v <= rst ? 1'b0 : p_v;
+                    q5_jl <= p_jl; q5_sum <= e_sum; q5_who <= p_who;
+                end
+                assign wb_sum[i][g] = q5_sum;
+                assign wb_jl[i][g] = q5_jl;
                 for (j = J0; j < J1; j = j + 1) begin : back
-                    assign wb_v[i][j] = p_v && (p_who == j - J0);
+                    assign wb_v[i][j] = q5_v && (q5_who == j - J0);
                 end
             end
         end

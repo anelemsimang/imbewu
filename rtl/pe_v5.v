@@ -8,7 +8,7 @@
 //  * The cell has no FP32 adder. At the end of each block it sends a
 //    request (its block total so far and its last product, which the adder
 //    adds, the exponent e, and its FP32 total acc) to an
-//    adder SHARED by a group of cells in the same row (systolic_v5.v). Six
+//    adder SHARED by a group of cells in the same row (systolic_v5.v). Seven
 //    ticks later the adder sends the new total back (wb_*).
 // Results are bit-for-bit the same as version 4.
 module pe_v5 (
