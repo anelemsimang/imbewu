@@ -6,13 +6,11 @@
 set P      $::env(PLATFORM)
 set OUT    $::env(OUT)
 set PERIOD $::env(PERIOD)
-set CLIB   $::env(CORNER_LIB)
 set TAG    $::env(CORNER)
+source tools/w2_pdk.tcl
 source tools/w2_reports.tcl
 
-read_lef $P/lef/sky130_fd_sc_hd.tlef
-read_lef $P/lef/sky130_fd_sc_hd_merged.lef
-read_liberty $CLIB
+w2_read_tech $P $TAG
 read_db $OUT/final.odb
 read_sdc $OUT/groute.sdc
 set_propagated_clock [all_clocks]

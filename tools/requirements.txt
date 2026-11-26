@@ -2,3 +2,6 @@ ml_dtypes>=0.5
 numpy
 yices-solver
 torch
+# The environment's setup script installs these by name (fresh sessions
+# clone main, which may not have this file), with PyTorch's CPU-only build:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu

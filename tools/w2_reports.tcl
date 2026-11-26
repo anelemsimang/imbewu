@@ -20,7 +20,7 @@ proc w2_reports {OUT TAG PERIOD} {
     set m [$inst getMaster]
     set a [expr [$m getWidth] * [$m getHeight] / double($dbu * $dbu)]
     set total [expr $total + $a]
-    if {[regexp {__(fill|tapvpwrvgnd|decap)} [$m getName]]} { set fill [expr $fill + $a] }
+    if {[regexp $::W2_FILL_RE [$m getName]]} { set fill [expr $fill + $a] }
   }
   set die  [$block getDieArea]
   set core [$block getCoreArea]

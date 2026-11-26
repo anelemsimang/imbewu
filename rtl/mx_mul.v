@@ -20,6 +20,30 @@ module mx_mul (
     input  wire               ph,       // FP4 side: use the high half of the lane
     output wire signed [47:0] p
 );
+    // The multiply in two halves, so the version 5 cell can put a register
+    // between them (D-027): mx_mul_s1 decodes and multiplies the 9-bit
+    // signed significands, mx_mul_s2 shifts the products into place and adds
+    // them. Together they give exactly the same p as before.
+    wire signed [17:0] m0, m1;
+    wire        [4:0]  sh0, sh1;
+    mx_mul_s1 u_s1 (.fa(fa), .fb(fb), .a(a), .b(b), .ph(ph), .m0(m0), .sh0(sh0), .m1(m1), .sh1(sh1));
+    mx_mul_s2 u_s2 (.m0(m0), .sh0(sh0), .m1(m1), .sh1(sh1), .p(p));
+endmodule
+
+// First half: decode both sides and multiply the signed significands.
+// m0 x 2^sh0 (+ m1 x 2^sh1 when both sides are FP4) is the product x 2^18.
+// Outside the both-FP4 case m1 and sh1 are zero.
+module mx_mul_s1 (
+    input  wire [1:0]         fa,
+    input  wire [1:0]         fb,
+    input  wire [7:0]         a,
+    input  wire [7:0]         b,
+    input  wire               ph,
+    output wire signed [17:0] m0,
+    output wire [4:0]         sh0,
+    output wire signed [17:0] m1,
+    output wire [4:0]         sh1
+);
     // value = sig * 2^(sh - 9)
     function [13:0] dec4;
         input [3:0] n;
@@ -52,16 +76,27 @@ module mx_mul (
         end
     endfunction
 
-    function signed [47:0] prod;
-        input [13:0] u, v;
-        reg signed [47:0] m;
-        begin
-            m    = $signed(u[13:5]) * $signed(v[13:5]);
-            prod = m <<< (u[4:0] + v[4:0]);
-        end
-    endfunction
-
     wire both_fp4 = (fa == 2'd2) && (fb == 2'd2);
-    assign p = both_fp4 ? prod(dec4(a[3:0]), dec4(b[3:0])) + prod(dec4(a[7:4]), dec4(b[7:4]))
-                        : prod(dec(fa, a, ph), dec(fb, b, ph));
+    wire [13:0] u0 = both_fp4 ? dec4(a[3:0]) : dec(fa, a, ph);
+    wire [13:0] v0 = both_fp4 ? dec4(b[3:0]) : dec(fb, b, ph);
+    wire [13:0] u1 = both_fp4 ? dec4(a[7:4]) : 14'd0;
+    wire [13:0] v1 = both_fp4 ? dec4(b[7:4]) : 14'd0;
+    // 9 x 9 signed products fit in 18 bits (largest size 256 x 256)
+    assign m0  = $signed(u0[13:5]) * $signed(v0[13:5]);
+    assign m1  = $signed(u1[13:5]) * $signed(v1[13:5]);
+    assign sh0 = u0[4:0] + v0[4:0];     // at most 28 (FP8 14 + 14)
+    assign sh1 = u1[4:0] + v1[4:0];
+endmodule
+
+// Second half: shift each product into place and add them.
+module mx_mul_s2 (
+    input  wire signed [17:0] m0,
+    input  wire [4:0]         sh0,
+    input  wire signed [17:0] m1,
+    input  wire [4:0]         sh1,
+    output wire signed [47:0] p
+);
+    wire signed [47:0] w0 = m0;
+    wire signed [47:0] w1 = m1;
+    assign p = (w0 <<< sh0) + (w1 <<< sh1);
 endmodule

@@ -3,8 +3,10 @@
 // Version 4 gave every cell its own FP32 adder (three quarters of the cell)
 // and did the multiply, the block sum and the FP32 add all in one tick.
 // Version 5 (decision D-017):
-//  * The multiply has its own tick: the product is stored in p_r, and the
-//    block total is updated from it one tick later.
+//  * The multiply has its own ticks: two since D-027. Tick 1 decodes and
+//    multiplies the significands (mx_mul_s1, stored in m0_r..sh1_r), tick 2
+//    shifts and adds them into the product p_r (mx_mul_s2), and the block
+//    total is updated from p_r one tick later.
 //  * The cell has no FP32 adder. At the end of each block it sends a
 //    request (its block total so far and its last product, which the adder
 //    adds, the exponent e, and its FP32 total acc) to an
@@ -47,17 +49,26 @@ module pe_v5 (
     input  wire [31:0]        wb_sum,
     output reg  [31:0]        res       // FP32 result of the latest finished job
 );
-    wire signed [47:0] p;
-    mx_mul u_mul (.fa(fa_in), .fb(fb_in), .a(a_in), .b(b_in), .ph(ph_in), .p(p));
+    wire signed [17:0] m0, m1;
+    wire        [4:0]  sh0, sh1;
+    mx_mul_s1 u_mul1 (.fa(fa_in), .fb(fb_in), .a(a_in), .b(b_in), .ph(ph_in),
+                      .m0(m0), .sh0(sh0), .m1(m1), .sh1(sh1));
     wire signed [10:0] e = $signed({3'd0, sa_in}) + $signed({3'd0, sb_in}) - 11'sd272
                          - ((fa_in == 2'd0) ? 11'sd6 : 11'sd0)
                          - ((fb_in == 2'd0) ? 11'sd6 : 11'sd0);
 
-    // tick 1: the product and its tags
+    // tick 1: the significand products and their tags
+    reg signed [17:0] m0_r, m1_r;
+    reg        [4:0]  sh0_r, sh1_r;
+    reg signed [10:0] e_r1;
+    reg               v_r1, be_r1, jl_r1;
+    wire signed [47:0] p;
+    mx_mul_s2 u_mul2 (.m0(m0_r), .sh0(sh0_r), .m1(m1_r), .sh1(sh1_r), .p(p));
+    // tick 2: the product and its tags
     reg signed [47:0] p_r;
     reg signed [10:0] e_r;
     reg               v_r, be_r, jl_r;
-    // tick 2: the exact block total
+    // tick 3: the exact block total
     reg signed [47:0] partial;
     reg        [31:0] acc;
     wire signed [47:0] x = partial + p_r;
@@ -72,13 +83,17 @@ module pe_v5 (
     always @(posedge clk) begin
         a_out  <= a_in;  fa_out <= fa_in; sa_out <= sa_in; ph_out <= ph_in;
         b_out  <= b_in;  fb_out <= fb_in; sb_out <= sb_in;
+        m0_r   <= m0;  sh0_r <= sh0;  m1_r <= m1;  sh1_r <= sh1;
+        e_r1   <= e;
+        be_r1  <= bl_in | jl_in;
+        jl_r1  <= jl_in;
         p_r    <= p;
-        e_r    <= e;
-        be_r   <= bl_in | jl_in;
-        jl_r   <= jl_in;
+        e_r    <= e_r1;
+        be_r   <= be_r1;
+        jl_r   <= jl_r1;
         if (rst) begin
             v_out <= 1'b0; bl_out <= 1'b0; jl_out <= 1'b0;
-            v_r <= 1'b0;
+            v_r1 <= 1'b0; v_r <= 1'b0;
             partial <= 48'sd0;
             acc <= 32'd0;
             res <= 32'd0;
@@ -86,7 +101,8 @@ module pe_v5 (
             v_out  <= v_in;
             bl_out <= bl_in;
             jl_out <= jl_in;
-            v_r    <= v_in;
+            v_r1   <= v_in;
+            v_r    <= v_r1;
             if (v_r) partial <= be_r ? 48'sd0 : x;
             if (wb_v) begin
                 if (wb_jl) begin
