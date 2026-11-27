@@ -93,9 +93,20 @@ estimate_parasitics -placement
 repair_design
 detailed_placement
 
-clock_tree_synthesis -root_buf $W2_CTS_ROOT -buf_list $W2_CTS_BUFS -sink_clustering_enable
+# -insertion_delay: each block's clock pin counts with the clock delay inside
+# the block (about 0.21 ns, from its timing model), so the tree reaches the
+# block pins that much earlier and the flip-flops inside the blocks get the
+# clock at the same time as the engine's own flip-flops
+clock_tree_synthesis -root_buf $W2_CTS_ROOT -buf_list $W2_CTS_BUFS -sink_clustering_enable \
+  -insertion_delay
 set_propagated_clock [all_clocks]
 estimate_parasitics -placement
+# worst paths before any repair (to see what the repairs are fixing)
+report_checks -path_delay max -group_path_count 5 -fields {fanout cap slew} > $OUT/cts_setup.rpt
+report_checks -path_delay min -group_path_count 5 -fields {fanout cap slew} > $OUT/cts_hold.rpt
+report_worst_slack -max > $OUT/cts_slack.rpt
+report_worst_slack -min >> $OUT/cts_slack.rpt
+if {[info exists ::env(STOP_AFTER_CTS)]} { exit }
 repair_clock_nets
 repair_timing -setup -hold -hold_margin [expr $W2_HOLDM * $W2_TU]
 detailed_placement
