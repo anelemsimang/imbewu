@@ -93,4 +93,12 @@ proc w2_read_tech {P corner} {
   read_lef $W2_TLEF
   foreach l $W2_LEFS { read_lef $l }
   foreach l [w2_libs $P $corner] { read_liberty $l }
+  # MACROS: layout folders of finished blocks used as parts (D-031), each
+  # with abstract.lef and model_<corner>.lib from tools/w2_abstract.sh
+  if {[info exists ::env(MACROS)]} {
+    foreach d $::env(MACROS) {
+      read_lef $d/abstract.lef
+      read_liberty $d/model_$corner.lib
+    }
+  }
 }
