@@ -123,7 +123,7 @@ mutate $F "adder: larger and smaller swapped when subtracting" 's/end else if (a
 mutate $S5 "adder requests not picked from the whole group"  's/for (c = J0; c < J1; c = c + 1)/for (c = J0; c < J1 - 1; c = c + 1)/' v5
 echo "results handed down the columns (D-031):"
 mutate $S5 "hand-down: rows put on the column one tick per row, not two" 's/assign inj_out = ~inj_n1;/assign inj_out = ~inj_n0;/' drain
-mutate $S5 "hand-down: results kept one tick early"         's/if (cap_q) hold <= res;/if (cap_in) hold <= res;/' drain
+mutate $S5 "hand-down: results kept one tick early"         's/if (cq) hold <= rs_k;/if (cap_in) hold <= rs_k;/' drain
 mutate $S5 "hand-down: row number not delayed with the row" 's/assign out_row_idx = i_d\[N-1\];/assign out_row_idx = i_d[N-2];/' drain
 echo "tiling controller:"
 T=rtl/matmul_unit.v

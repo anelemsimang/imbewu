@@ -399,25 +399,31 @@ module v5_grp #(
     assign wb_jl = q5_jl;
     generate
         if (DRAIN) begin : drain
-            // cap_q and inj_q[0] drive 512 enables each; the copies sent on
-            // to the block below have flip-flops of their own (kept as the
-            // inverse, so synthesis cannot merge them with the enables)
-            reg             cap_q, cap_n;
-            reg [1:0]       inj_q;
-            reg             inj_n0, inj_n1;
-            reg [GE*32-1:0] hold, dr;
+            // Each column has its own copy of the keep and put flip-flops
+            // (v5_ff1, never merged by synthesis), so each drives only its
+            // column's 32 results instead of all 512 across the block. The
+            // copies sent on to the block below have their own flip-flops
+            // too (kept as the inverse, so they are not merged either).
+            reg cap_n, inj_n0, inj_n1;
             always @(posedge clk) begin
-                cap_q  <= rst ? 1'b0 : cap_in;
                 cap_n  <= rst ? 1'b1 : ~cap_in;
-                inj_q  <= rst ? 2'b0 : {inj_q[0], inj_in};
                 inj_n0 <= rst ? 1'b1 : ~inj_in;
                 inj_n1 <= rst ? 1'b1 : inj_n0;
-                if (cap_q) hold <= res;
-                dr <= inj_q[0] ? hold : dr_in;
             end
             assign cap_out = ~cap_n;
             assign inj_out = ~inj_n1;
-            assign dr_out  = dr;
+            for (j = 0; j < GE; j = j + 1) begin : dcol
+                wire        cq, iq;
+                wire [31:0] rs_k = res[j*32 +: 32];
+                reg  [31:0] hold, dr;
+                v5_ff1 u_cap (.clk(clk), .rst(rst), .d(cap_in), .q(cq));
+                v5_ff1 u_inj (.clk(clk), .rst(rst), .d(inj_in), .q(iq));
+                always @(posedge clk) begin
+                    if (cq) hold <= rs_k;
+                    dr <= iq ? hold : dr_in[j*32 +: 32];
+                end
+                assign dr_out[j*32 +: 32] = dr;
+            end
         end else begin : nodrain
             assign cap_out = 1'b0;
             assign inj_out = 1'b0;
@@ -427,6 +433,18 @@ module v5_grp #(
             assign wb_v[j] = q5_v && (q5_who == j - J0);
         end
     endgenerate
+endmodule
+
+// v5_ff1 - one flip-flop with reset, kept as a module of its own so that
+// synthesis keeps every copy (copies drive nearby loads only; D-031)
+(* keep_hierarchy *)
+module v5_ff1 (
+    input  wire clk,
+    input  wire rst,
+    input  wire d,
+    output reg  q
+);
+    always @(posedge clk) q <= rst ? 1'b0 : d;
 endmodule
 
 // v5_blk - the block laid out once and repeated for the hand-down engine
