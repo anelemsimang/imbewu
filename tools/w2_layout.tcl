@@ -27,11 +27,16 @@ if {[info exists ::env(PINS)]} {
   # the first ASAP7 block layout), within +-0.01 ns; flip-flop delay
   # 0.03-0.06 ns, wire between blocks up to 0.02 ns, setup 0.02 ns.
   # Hold between blocks is checked again when the grid is put together.
-  set lat [expr {[info exists ::env(BLK_LAT)] ? $::env(BLK_LAT) : 0.20}]
+  # BLK_SKEW (ns): how much earlier (inputs) or later (outputs) a
+  # neighbour's clock may arrive for hold. The block pads its own inputs
+  # and outputs for it, so the wires between blocks need no hold buffers
+  # (the channels between blocks have no room to reach them).
+  set lat  [expr {[info exists ::env(BLK_LAT)]  ? $::env(BLK_LAT)  : 0.20}]
+  set skew [expr {[info exists ::env(BLK_SKEW)] ? $::env(BLK_SKEW) : 0.0}]
   set_input_delay  -max [expr {($lat + 0.10) * $W2_TU}] -clock clk $ins
-  set_input_delay  -min [expr {($lat + 0.02) * $W2_TU}] -clock clk $ins
+  set_input_delay  -min [expr {($lat + 0.02 - $skew) * $W2_TU}] -clock clk $ins
   set_output_delay -max [expr {(0.05 - $lat) * $W2_TU}] -clock clk [all_outputs]
-  set_output_delay -min [expr {-($lat + 0.01) * $W2_TU}] -clock clk [all_outputs]
+  set_output_delay -min [expr {-($lat + 0.01 + $skew) * $W2_TU}] -clock clk [all_outputs]
 } else {
   set_input_delay  [expr 0.2 * $PERIOD * $W2_TU] -clock clk $ins
   set_output_delay [expr 0.2 * $PERIOD * $W2_TU] -clock clk [all_outputs]

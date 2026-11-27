@@ -97,6 +97,17 @@ pdngen
 source $P/setRC.tcl
 set_dont_use $W2_DONT_USE
 
+# Wires from one block straight to the next stay as they are: the blocks
+# pad their own inputs and outputs for hold (BLK_SKEW in the block layout),
+# and buffers in the 2-3 um channels cannot be reached by the router.
+set nbb 0
+foreach net [[ord::get_db_block] getNets] {
+  set nb 0; set no 0
+  foreach it [$net getITerms] { if {[[[$it getInst] getMaster] getName] eq "v5_blk"} { incr nb } else { incr no } }
+  if {$nb >= 2 && $no == 0 && [llength [$net getBTerms]] == 0} { set_dont_touch [get_nets [$net getName]]; incr nbb }
+}
+puts "Block-to-block wires kept as they are: $nbb"
+
 set DENS [expr {[info exists ::env(DENSITY)] ? $::env(DENSITY) : 0.6}]
 global_placement -density $DENS -pad_left 1 -pad_right 1
 estimate_parasitics -placement
