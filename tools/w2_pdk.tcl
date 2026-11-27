@@ -39,8 +39,11 @@ if {$PDK eq "asap7"} {
   set W2_FILL    {FILLERxp5_ASAP7_75t_R FILLER_ASAP7_75t_R DECAPx1_ASAP7_75t_R DECAPx2_ASAP7_75t_R \
                   DECAPx4_ASAP7_75t_R DECAPx6_ASAP7_75t_R DECAPx10_ASAP7_75t_R}
   set W2_FILL_RE {^(FILLER|DECAP|TAPCELL)}
-  proc w2_taps {} {
-    tapcell -distance 25 -tapcell_master TAPCELL_ASAP7_75t_R -endcap_master TAPCELL_ASAP7_75t_R
+  # halo: the space kept free around blocks (tapcell's own default is 2 um,
+  # which removes every row from the narrow channels between blocks)
+  proc w2_taps {{halo 2}} {
+    tapcell -distance 25 -tapcell_master TAPCELL_ASAP7_75t_R -endcap_master TAPCELL_ASAP7_75t_R \
+      -halo_width_x $halo -halo_width_y $halo
   }
   proc w2_power_nets {} {
     add_global_connection -net VDD -inst_pattern {.*} -pin_pattern {^VDD$} -power

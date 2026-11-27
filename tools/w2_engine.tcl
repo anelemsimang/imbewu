@@ -76,7 +76,13 @@ set_io_pin_constraint -pin_names [concat [names b_row*] [names in_b_scale*] [nam
   [names clk] [names rst]] -region top:*
 set_io_pin_constraint -pin_names [concat [names out_*]] -region bottom:*
 place_pins -hor_layers [lindex $W2_PIN_LAYERS 0] -ver_layers [lindex $W2_PIN_LAYERS 1]
-w2_taps
+w2_taps 0.5
+set nr 0
+foreach r [[ord::get_db_block] getRows] {
+  set bb [$r getBBox]
+  if {[ord::dbu_to_microns [$bb xMin]] > 40 && [ord::dbu_to_microns [$bb xMax]] < $W - 15} { incr nr }
+}
+puts "Rows in the channels between blocks: $nr"
 
 # Power grid for the engine's own cells (the blocks carry their own grid;
 # joining the two is not done yet, see docs/RESULTS.md)
