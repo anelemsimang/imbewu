@@ -96,6 +96,8 @@ global_placement -density $DENS -pad_left 1 -pad_right 1
 estimate_parasitics -placement
 repair_design
 detailed_placement
+write_db $OUT/place.odb
+if {[info exists ::env(STOP_BEFORE_CTS)]} { exit }
 
 # -insertion_delay: each block's clock pin counts with the clock delay inside
 # the block (about 0.21 ns, from its timing model), so the tree reaches the
