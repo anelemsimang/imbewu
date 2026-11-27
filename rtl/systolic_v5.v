@@ -399,17 +399,24 @@ module v5_grp #(
     assign wb_jl = q5_jl;
     generate
         if (DRAIN) begin : drain
-            reg             cap_q;
+            // cap_q and inj_q[0] drive 512 enables each; the copies sent on
+            // to the block below have flip-flops of their own (kept as the
+            // inverse, so synthesis cannot merge them with the enables)
+            reg             cap_q, cap_n;
             reg [1:0]       inj_q;
+            reg             inj_n0, inj_n1;
             reg [GE*32-1:0] hold, dr;
             always @(posedge clk) begin
-                cap_q <= rst ? 1'b0 : cap_in;
-                inj_q <= rst ? 2'b0 : {inj_q[0], inj_in};
+                cap_q  <= rst ? 1'b0 : cap_in;
+                cap_n  <= rst ? 1'b1 : ~cap_in;
+                inj_q  <= rst ? 2'b0 : {inj_q[0], inj_in};
+                inj_n0 <= rst ? 1'b1 : ~inj_in;
+                inj_n1 <= rst ? 1'b1 : inj_n0;
                 if (cap_q) hold <= res;
                 dr <= inj_q[0] ? hold : dr_in;
             end
-            assign cap_out = cap_q;
-            assign inj_out = inj_q[1];
+            assign cap_out = ~cap_n;
+            assign inj_out = ~inj_n1;
             assign dr_out  = dr;
         end else begin : nodrain
             assign cap_out = 1'b0;

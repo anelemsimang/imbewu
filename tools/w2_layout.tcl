@@ -20,8 +20,22 @@ link_design $TOP
 create_clock -name clk -period [expr $PERIOD * $W2_TU] [get_ports clk]
 set_clock_uncertainty [expr $W2_UNC * $W2_TU] [get_clocks clk]
 set ins [delete_from_list [all_inputs] [get_ports clk]]
-set_input_delay  [expr 0.2 * $PERIOD * $W2_TU] -clock clk $ins
-set_output_delay [expr 0.2 * $PERIOD * $W2_TU] -clock clk [all_outputs]
+if {[info exists ::env(PINS)]} {
+  # A block of a grid (D-031): every input comes from a flip-flop in an
+  # identical neighbour, every output goes to one. Their clock arrives
+  # BLK_LAT after the ideal edge, like this block's own (0.18-0.23 ns in
+  # the first ASAP7 block layout), within +-0.01 ns; flip-flop delay
+  # 0.03-0.06 ns, wire between blocks up to 0.02 ns, setup 0.02 ns.
+  # Hold between blocks is checked again when the grid is put together.
+  set lat [expr {[info exists ::env(BLK_LAT)] ? $::env(BLK_LAT) : 0.20}]
+  set_input_delay  -max [expr {($lat + 0.10) * $W2_TU}] -clock clk $ins
+  set_input_delay  -min [expr {($lat + 0.02) * $W2_TU}] -clock clk $ins
+  set_output_delay -max [expr {(0.05 - $lat) * $W2_TU}] -clock clk [all_outputs]
+  set_output_delay -min [expr {-($lat + 0.01) * $W2_TU}] -clock clk [all_outputs]
+} else {
+  set_input_delay  [expr 0.2 * $PERIOD * $W2_TU] -clock clk $ins
+  set_output_delay [expr 0.2 * $PERIOD * $W2_TU] -clock clk [all_outputs]
+}
 set_driving_cell -lib_cell [lindex $W2_DRIVER 0] -pin [lindex $W2_DRIVER 1] $ins
 set_load $W2_LOAD [all_outputs]
 write_sdc $OUT/constraints.sdc
