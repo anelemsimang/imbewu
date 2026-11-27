@@ -105,14 +105,37 @@ clock_tree_synthesis -root_buf $W2_CTS_ROOT -buf_list $W2_CTS_BUFS -sink_cluster
   -insertion_delay
 set_propagated_clock [all_clocks]
 estimate_parasitics -placement
+repair_clock_nets
+estimate_parasitics -placement
 write_db $OUT/cts.odb
-# worst paths before any repair (to see what the repairs are fixing)
+
+# The engine's inputs and outputs are timed against neighbours on the same
+# clock tree (memory, the network on chip): a virtual clock that arrives as
+# late as the engine's own flip-flops' clock (the median clock delay).
+set lat {}
+set n 0
+foreach r [all_registers -edge_triggered] {
+  if {[incr n] % 50} continue
+  set p [get_pins -quiet [get_full_name $r]/CLK]
+  if {[llength $p]} { lappend lat [get_property [lindex $p 0] arrival_max_rise] }
+}
+set lat [lsort -real $lat]
+set L [lindex $lat [expr {[llength $lat] / 2}]]
+puts [format "Clock delay at the engine's flip-flops: min %.0f median %.0f max %.0f (%d samples)" \
+        [lindex $lat 0] $L [lindex $lat end] [llength $lat]]
+create_clock -name vclk -period [expr $PERIOD * $W2_TU]
+set_clock_latency $L [get_clocks vclk]
+set_clock_uncertainty [expr $W2_UNC * $W2_TU] [get_clocks vclk]
+set_input_delay  [expr 0.2 * $PERIOD * $W2_TU] -clock vclk $ins
+set_output_delay [expr 0.2 * $PERIOD * $W2_TU] -clock vclk [all_outputs]
+set_false_path -from [get_ports rst]
+
+# worst paths before repair (to see what the repairs are fixing)
 report_checks -path_delay max -group_count 5 -fields {fanout cap slew} > $OUT/cts_setup.rpt
 report_checks -path_delay min -group_count 5 -fields {fanout cap slew} > $OUT/cts_hold.rpt
 report_worst_slack -max > $OUT/cts_slack.rpt
 report_worst_slack -min >> $OUT/cts_slack.rpt
 if {[info exists ::env(STOP_AFTER_CTS)]} { exit }
-repair_clock_nets
 repair_timing -setup -hold -hold_margin [expr $W2_HOLDM * $W2_TU]
 detailed_placement
 check_placement -verbose
