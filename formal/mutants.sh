@@ -17,6 +17,14 @@ v5sim() {   # 4x4 version 5 tests (adders shared by 4 cells) with one file repla
         vvp -n $OUT/tb5 +PRE=build/v5m/v4_N4_$sc | grep -q '^PASS' || return 1
     done
 }
+mkdir -p build/v5d; [ -f build/v5d/v4_N8_stress_exp.hex ] || python3 tools/gen_v4_vectors.py 8 build/v5d 20 7
+drainsim() {   # 8x8 version 5 with results handed down (DRAIN = 1, 2 blocks per row)
+    local files=$(echo $V5 | sed "s#$1#$2#")
+    iverilog -g2012 -DGRID_N=8 -DV5 -DGROUP=4 -DDRAIN -o $OUT/tbd $files tests/tb_systolic_v4.v || return 1
+    for sc in same mixed stress; do
+        vvp -n $OUT/tbd +PRE=build/v5d/v4_N8_$sc | grep -q '^PASS' || return 1
+    done
+}
 V4="rtl/mx_mul.v rtl/fp32_add_fx.v rtl/pe_v4.v rtl/systolic_v4.v"
 v4sim() {   # run the 4x4 version 4 tests with one file replaced
     local files=$(echo $V4 | sed "s#$1#$2#")
@@ -46,6 +54,8 @@ mutate() {   # file, description, sed expression, checker (cell|mul|fadd|v4|form
         v4sim $src $m && r=missed || r=caught
     elif [ $kind = v5 ]; then
         v5sim $src $m && r=missed || r=caught
+    elif [ $kind = drain ]; then
+        drainsim $src $m && r=missed || r=caught
     elif [ $kind = tile ]; then
         rm -rf $OUT/tile; OUT=$OUT/tile MM=$m tests/run_tile_tests.sh > /dev/null 2>&1 && r=missed || r=caught
     elif [ $kind = tilev1 ]; then
@@ -111,6 +121,10 @@ mutate $M "both FP4: high product shifted by the low one's amount" 's/(w1 <<< sh
 mutate $S5 "rows read out one tick too early"                's/localparam LAT = 8;/localparam LAT = 7;/' formal5
 mutate $F "adder: larger and smaller swapped when subtracting" 's/end else if (al_a >= al_x) begin/end else if (al_a < al_x) begin/' fadd
 mutate $S5 "adder requests not picked from the whole group"  's/for (c = J0; c < J1; c = c + 1)/for (c = J0; c < J1 - 1; c = c + 1)/' v5
+echo "results handed down the columns (D-031):"
+mutate $S5 "hand-down: rows put on the column one tick per row, not two" 's/assign inj_out = inj_q\[1\];/assign inj_out = inj_q[0];/' drain
+mutate $S5 "hand-down: results kept one tick early"         's/if (cap_q) hold <= res;/if (cap_in) hold <= res;/' drain
+mutate $S5 "hand-down: row number not delayed with the row" 's/assign out_row_idx = i_d\[N-1\];/assign out_row_idx = i_d[N-2];/' drain
 echo "tiling controller:"
 T=rtl/matmul_unit.v
 mutate $T "block counter never advances (wrong scales)"     's/if (last_inblk) begin bib <= 0; blk <= blk + 1'"'"'b1; end/if (last_inblk) begin bib <= 0; blk <= blk; end/' tile

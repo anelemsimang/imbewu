@@ -65,8 +65,7 @@ module systolic_v5 #(
     // DRAIN = 1: results go down each column, one block per tick (D-031)
     wire [N*32-1:0] dr [0:N];         // into row i (row N: out of the last row)
     wire            cap [0:N][0:NG-1], inj [0:N][0:NG-1];
-    wire            cap0;             // row 0 reads its results (as the mux read-out)
-    reg             inj0;
+    wire            cap0, inj0;       // one tick ahead of row 0's keep and put (see below)
     assign dr[0] = {(N*32){1'b0}};
 
     genvar i, j, g;
@@ -180,11 +179,13 @@ module systolic_v5 #(
 
     // DRAIN = 1: each block keeps its results when the mux read-out would
     // read its row (cap, one row per tick), and puts them on the column's
-    // hand-down register two ticks per row later (inj). Row r reaches the
+    // hand-down register two ticks per row later (inj). cap and inj reach
+    // each block one tick ahead and are registered there before use, so
+    // the wide enables start from a register inside the block. Row r reaches the
     // bottom N ticks after the mux read-out would give it; valid and row
     // number are delayed to match. Every wire is between neighbouring blocks.
-    assign cap0 = last_dly[N+LAT-1];
-    always @(posedge clk) inj0 <= rst ? 1'b0 : cap0;
+    assign cap0 = last_dly[N+LAT-2];
+    assign inj0 = last_dly[N+LAT-1];
     generate
         if (DRAIN) begin : drain
             reg [N-1:0]  v_d;
@@ -226,9 +227,9 @@ module v5_grp #(
     output wire [GE*BW-1:0]  b_out,
     output wire [GE*32-1:0]  res,
     // result hand-down (DRAIN = 1; unused otherwise)
-    input  wire              cap_in,     // keep this group's results now
+    input  wire              cap_in,     // keep this group's results next tick
     output wire              cap_out,    // to the group below, one tick later
-    input  wire              inj_in,     // put them on the hand-down register now
+    input  wire              inj_in,     // put them on the hand-down register next tick
     output wire              inj_out,    // to the group below, two ticks later
     input  wire [GE*32-1:0]  dr_in,      // from the group above
     output wire [GE*32-1:0]  dr_out      // to the group below
@@ -404,8 +405,8 @@ module v5_grp #(
             always @(posedge clk) begin
                 cap_q <= rst ? 1'b0 : cap_in;
                 inj_q <= rst ? 2'b0 : {inj_q[0], inj_in};
-                if (cap_in) hold <= res;
-                dr <= inj_in ? hold : dr_in;
+                if (cap_q) hold <= res;
+                dr <= inj_q[0] ? hold : dr_in;
             end
             assign cap_out = cap_q;
             assign inj_out = inj_q[1];
