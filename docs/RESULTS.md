@@ -1705,3 +1705,41 @@ first half is the slowest path at every corner.
 **Progress score (D-026 scale).** 16 cells x 1,026 MHz = 16.4 billion per
 second: **0.00016** (0.000158 -> 0.000164; the adder-input change moved
 it by 4%).
+
+## 2026-11-27 - One block of the 32x32 engine laid out (ASAP7, D-031)
+
+The 32x32 engine is 64 copies of one block (`v5_blk`: 16 cells of a row,
+their shared FP32 adder and the hand-down registers that carry results
+down the column). One block, placed and wired with OpenROAD on ASAP7 at a
+fixed 480 x 30 µm, pins where its neighbours' pins are
+(`tools/w2_blk_pins.tcl`). Outputs in `build/layout/blk16_asap7_p075`.
+
+| | Typical (TT) | Slow (SS) | Fast (FF) |
+|---|---|---|---|
+| **Clock (real wires)** | **about 936 MHz** | **about 651 MHz** | about 1,211 MHz |
+| Hold, register to register | passes | +0.021 ns | -0.003 ns (to fix) |
+
+Gates 7,174 µm² (54,772 before layout, 5,849 + 1,024 flip-flops), block
+0.017 mm², 310 wiring violations left (158 spacing, 152 shorts) to clean
+up. Before wiring the estimate was 999 MHz. Slowest path: between a cell
+and its shared adder, which now serves 16 cells spread over 480 µm (4 in
+the 4x4 engine); an extra register on that path is the fix if needed.
+Hold figures on the block's inputs and outputs at SS and FF are not
+meaningful yet: the neighbour model (clock 0.20 ns late) is a typical-
+corner figure; the grid assembly checks them for real.
+
+Three layout runs found three problems, all fixed before this one:
+the signal passed to the next block left only after 512 loads (now its
+own flip-flop); inputs timed against an ideal clock filled the top rows
+with 3,300 hold buffers and 1,100 wiring violations (now timed against an
+identical neighbour); one flip-flop drove 1,024 loads across the whole
+block (now one copy per column). Tests: `make test-drain` 9 runs at 4x4,
+8x8, 16x16, 0 differences from the plain engine; 3 new planted bugs
+caught; the full run before these changes caught 59 of 59.
+
+**Progress score (D-026 scale).** Counting only what is laid out: 16 cells
+x 936 MHz = 15.0 billion per second, **0.00015** (from 0.00016: same
+cells, clock 9% lower because of the wider adder groups). Projection, not
+measured: 64 blocks at this clock = 1,024 x 936 MHz = 0.96 trillion per
+second, a score of **about 0.01**, if the clock holds when the blocks are
+put together (next step).
