@@ -1719,7 +1719,7 @@ fixed 480 x 30 µm, pins where its neighbours' pins are
 | **Clock (real wires)** | **about 936 MHz** | **about 651 MHz** | about 1,211 MHz |
 | Hold, register to register | passes | +0.021 ns | -0.003 ns (to fix) |
 
-Gates 7,174 µm² (54,772 before layout, 5,849 + 1,024 flip-flops), block
+Gates 7,174 µm² (54,772 gates from synthesis, 5,881 of them flip-flops, 1,024 of those the hand-down registers), block
 0.017 mm², 310 wiring violations left (158 spacing, 152 shorts) to clean
 up. Before wiring the estimate was 999 MHz. Slowest path: between a cell
 and its shared adder, which now serves 16 cells spread over 480 µm (4 in
