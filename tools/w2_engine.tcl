@@ -26,6 +26,10 @@ set_input_delay  [expr 0.2 * $PERIOD * $W2_TU] -clock clk $ins
 set_output_delay [expr 0.2 * $PERIOD * $W2_TU] -clock clk [all_outputs]
 set_driving_cell -lib_cell [lindex $W2_DRIVER 0] -pin [lindex $W2_DRIVER 1] $ins
 set_load $W2_LOAD [all_outputs]
+# Reset is held for many ticks before any work starts and released well
+# before the first input, so it is not timed within one tick (its wire
+# reaches all 64 blocks and every delay-line flip-flop)
+set_false_path -from [get_ports rst]
 write_sdc $OUT/constraints.sdc
 
 # Grid. Block origins are on the M7 track grid (x, 0.064 µm) and the M4 grid
@@ -101,6 +105,7 @@ clock_tree_synthesis -root_buf $W2_CTS_ROOT -buf_list $W2_CTS_BUFS -sink_cluster
   -insertion_delay
 set_propagated_clock [all_clocks]
 estimate_parasitics -placement
+write_db $OUT/cts.odb
 # worst paths before any repair (to see what the repairs are fixing)
 report_checks -path_delay max -group_count 5 -fields {fanout cap slew} > $OUT/cts_setup.rpt
 report_checks -path_delay min -group_count 5 -fields {fanout cap slew} > $OUT/cts_hold.rpt
