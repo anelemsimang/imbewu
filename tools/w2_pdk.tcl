@@ -105,3 +105,8 @@ proc w2_read_tech {P corner} {
     }
   }
 }
+
+# The engine (tools/w2_engine.sh) wires over its blocks on the two thick top
+# layers, which the blocks leave almost free (M8/M9 on ASAP7)
+if {[info exists ::env(W2_SIG_LAYERS)]} { set W2_SIG_LAYERS $::env(W2_SIG_LAYERS) }
+if {[info exists ::env(W2_CLK_LAYERS)]} { set W2_CLK_LAYERS $::env(W2_CLK_LAYERS) }

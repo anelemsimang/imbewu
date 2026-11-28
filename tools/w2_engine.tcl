@@ -125,6 +125,8 @@ clock_tree_synthesis -root_buf $W2_CTS_ROOT -buf_list $W2_CTS_BUFS -sink_cluster
 set_propagated_clock [all_clocks]
 estimate_parasitics -placement
 repair_clock_nets
+# the tree's first buffers can land outside the die, above the clock pin
+detailed_placement
 estimate_parasitics -placement
 write_db $OUT/cts.odb
 

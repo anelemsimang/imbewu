@@ -14,6 +14,10 @@ OPENROAD=${OPENROAD:-/opt/eda/bin/openroad}
 P=build/pdk/$PDK
 OUT=build/layout/$LABEL; mkdir -p $OUT
 export MACROS=build/layout/$BLK
+# The blocks fill M1-M7 with their own wiring; without M8/M9 the engine's
+# clock wires crowd through the 2-3 um gaps and reach the blocks 2.5-5.7 ns
+# late instead of about 0.8 ns
+export W2_SIG_LAYERS=M2-M9 W2_CLK_LAYERS=M4-M9
 for f in abstract.lef model_TT.lib model_SS.lib model_FF.lib; do
   [ -s $MACROS/$f ] || { echo "missing $MACROS/$f: run tools/w2_abstract.sh $BLK"; exit 1; }
 done
