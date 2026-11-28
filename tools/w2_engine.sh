@@ -21,6 +21,13 @@ export W2_SIG_LAYERS=M2-M9 W2_CLK_LAYERS=M4-M9
 for f in abstract.lef model_TT.lib model_SS.lib model_FF.lib; do
   [ -s $MACROS/$f ] || { echo "missing $MACROS/$f: run tools/w2_abstract.sh $BLK"; exit 1; }
 done
+# Simplified block outlines (inside of M1-M7 one solid shape, edges exact):
+# with the full outlines detailed routing needs more than 15 GB.
+# SIMPLE_LEF=0 uses the full ones.
+if [ "${SIMPLE_LEF:-1}" = 1 ]; then
+  python3 tools/w2_simple_lef.py $MACROS/abstract.lef $MACROS/abstract_simple.lef
+  export MACRO_LEF=abstract_simple.lef
+fi
 LIB=$P/lib/merged_TT.lib; SLIB=$P/lib/synth_TT.lib
 TIE="-hicell TIEHIx1_ASAP7_75t_R H -locell TIELOx1_ASAP7_75t_R L"; BUF="BUFx2_ASAP7_75t_R A Y"
 

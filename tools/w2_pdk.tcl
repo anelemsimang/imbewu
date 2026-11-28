@@ -98,9 +98,11 @@ proc w2_read_tech {P corner} {
   foreach l [w2_libs $P $corner] { read_liberty $l }
   # MACROS: layout folders of finished blocks used as parts (D-031), each
   # with abstract.lef and model_<corner>.lib from tools/w2_abstract.sh
+  # MACRO_LEF: which outline (abstract_simple.lef: tools/w2_simple_lef.py)
   if {[info exists ::env(MACROS)]} {
+    set lef [expr {[info exists ::env(MACRO_LEF)] ? $::env(MACRO_LEF) : "abstract.lef"}]
     foreach d $::env(MACROS) {
-      read_lef $d/abstract.lef
+      read_lef $d/$lef
       read_liberty $d/model_$corner.lib
     }
   }
