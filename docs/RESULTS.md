@@ -1743,3 +1743,60 @@ cells, clock 9% lower because of the wider adder groups). Projection, not
 measured: 64 blocks at this clock = 1,024 x 936 MHz = 0.96 trillion per
 second, a score of **about 0.01**, if the clock holds when the blocks are
 put together (next step).
+
+## 2026-11-28 - The 32x32 engine: 64 blocks placed and wired roughly (ASAP7, D-031)
+
+`tools/w2_engine.sh blk16s_asap7_p075 32 1.1 eng32s_asap7_p11`: the 64
+blocks (now laid out with `BLK_SKEW=0.03`) placed in a 32 x 2 grid,
+1,019 x 1,217 µm (**1.24 mm²**), the engine's own logic (16,367 flip-flops
+of input delay lines, read-out) placed around them, clock tree, timing
+repair and global routing. Outputs in `build/layout/eng32s_asap7_p11`.
+
+**Detailed routing did not finish: it ran out of memory** (killed at 14 GB
+of the machine's 15 GB, in track assignment, before any wire was drawn).
+The figures below are from global routing (wire lengths estimated from
+the routing plan). For one block that estimate was 7% optimistic
+(1,000 MHz against 935 MHz after detailed routing).
+
+| Path kind (typical corner, 1.1 ns asked) | Worst slack | Clock it allows |
+|---|---|---|
+| Block to block (wires between neighbours) | +0.148 ns | 1,050 MHz |
+| Inside a block (from the block's own layout) | | 935 MHz |
+| Engine delay-line flip-flop to a block | -0.102 ns | **832 MHz** |
+| Engine flip-flop to flip-flop | +0.711 ns | |
+| Engine input pin straight into a block | -0.335 ns | 697 MHz |
+| Hold, all paths | +0.010 ns | passes |
+
+The slowest path inside the engine runs from a delay-line flip-flop into
+the first block of its row. The delay-line flip-flops get the clock about
+0.3 ns later than the flip-flops inside the blocks (1.13 against about
+0.8 + 0.2 ns), which takes that much off the path. Fix: tell the clock
+tree to reach the delay lines earlier, or add a register at each block's
+input. The input-pin path counts on the sender using 0.2 of a tick
+(0.22 ns) before the signal reaches the pin. In the full chip the sender
+is memory or the on-chip network, and their timing decides this path.
+
+Three problems in the assembly, all fixed:
+1. Tapcells' default 2 µm keep-out removed every placement row from the
+   2.3-3 µm gaps between blocks, so the hold buffers there landed about
+   130 µm away (wire length +130%). Now 0.5 µm (`w2_taps 0.5`): 4,224 rows
+   in the gaps, +0-1%.
+2. The router could not reach hold buffers placed on the 50,428 wires
+   that run straight from one block to the next, and global routing
+   turned 3,000 hold violations into 24,000. Now each block pads its own
+   edges for a neighbour clock up to 0.03 ns off (`BLK_SKEW`, D-031), and
+   the engine leaves those wires alone. Hold buffers: 4,959 -> 1,348 + 114.
+3. The blocks fill M1-M7 with their own wiring, so the engine's clock wires
+   squeezed through the gaps and reached the blocks 2.3-5.7 ns late. The
+   engine now also routes on M8/M9 over the blocks, and the clock reaches
+   them at 0.74-0.87 ns, with no routing overflow.
+The block with `BLK_SKEW=0.03` keeps its speed: 935 MHz TT, 1,219 MHz FF,
+about 650 MHz SS. It has 841 wiring violations, against 310 before. One
+net shorts and is timed without its wires.
+
+**Progress score (D-026 scale).** 1,024 cells x 832 MHz = 0.85 trillion
+8-bit multiplications per second, a score of **0.0085** (from 0.00015:
+64x the cells, clock 11% lower than one block alone, limited by the
+delay-line-to-block path above). This comes from global routing, not from
+a finished layout. Counting the engine's input-pin path as well:
+697 MHz, 0.0071.

@@ -384,3 +384,11 @@ ticks at the end of each job (32 ns at 1 GHz, small against jobs of
 thousands of ticks). `DRAIN = 0` stays the default, so all existing tests
 and proofs apply unchanged; `make test-drain` checks `DRAIN = 1`
 against it tick for tick at 4x4, 8x8 and 16x16.
+
+Assembly (2026-11-28): each block meets hold at its own edges for a
+neighbour whose clock is up to 0.03 ns off (`BLK_SKEW`). The engine adds
+no buffers to the wires between blocks, because the router cannot reach
+cells in the 2-3 µm gaps. The engine routes over the blocks on M8/M9,
+which the blocks leave free. Detailed routing of the whole engine needs
+more than 15 GB of memory (stopped at 14 GB), so it waits for a bigger
+machine or simpler block outlines.
